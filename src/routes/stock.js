@@ -1,0 +1,10 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = require("express");
+const stockController_1 = require("../controllers/stockController");
+const auth_1 = require("../middlewares/auth");
+const router = (0, express_1.Router)();
+router.post('/movements', auth_1.authenticate, auth_1.isAdmin, stockController_1.createStockMovement);
+router.get('/:productId', auth_1.authenticate, auth_1.isAdmin, stockController_1.getStock);
+router.get('/history/:productId', auth_1.authenticate, auth_1.isAdmin, stockController_1.getStockHistory);
+exports.default = router;
