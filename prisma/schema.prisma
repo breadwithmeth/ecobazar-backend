@@ -1,0 +1,108 @@
+model Category {
+  id        Int       @id @default(autoincrement())
+  name      String    @unique
+  products  Product[]
+}
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id               Int     @id @default(autoincrement())
+  telegram_user_id String  @unique
+  phone_number     String?
+  addresses        UserAddress[]
+  role             Role    @default(CUSTOMER)
+  orders           Order[]
+  name             String?
+  stockMovements   StockMovement[] @relation("AdminStockMovements")
+}
+
+model UserAddress {
+  id        Int    @id @default(autoincrement())
+  user      User   @relation(fields: [userId], references: [id])
+  userId    Int
+  address   String
+}
+
+enum Role {
+  ADMIN
+  CUSTOMER
+}
+
+model Store {
+  id      Int      @id @default(autoincrement())
+  name    String
+  address String
+  products Product[]
+}
+
+model Product {
+  id      Int      @id @default(autoincrement())
+  name    String
+  price   Float
+  image   String?
+  store   Store    @relation(fields: [storeId], references: [id])
+  storeId Int
+  category   Category? @relation(fields: [categoryId], references: [id])
+  categoryId Int?
+  stockMovements StockMovement[]
+  orderItems OrderItem[]
+}
+
+model StockMovement {
+  id        Int      @id @default(autoincrement())
+  product   Product  @relation(fields: [productId], references: [id])
+  productId Int
+  quantity  Int
+  type      StockMovementType
+  createdAt DateTime @default(now())
+  admin     User     @relation("AdminStockMovements", fields: [adminId], references: [id])
+  adminId   Int
+}
+
+enum StockMovementType {
+  INCOME
+  OUTCOME
+}
+
+model Order {
+  id        Int         @id @default(autoincrement())
+  user      User        @relation(fields: [userId], references: [id])
+  userId    Int
+  address   String?
+  createdAt DateTime    @default(now())
+  items     OrderItem[]
+  statuses  OrderStatus[]
+}
+
+model OrderStatus {
+  id        Int      @id @default(autoincrement())
+  order     Order    @relation(fields: [orderId], references: [id])
+  orderId   Int
+  status    String
+  createdAt DateTime @default(now())
+}
+
+// ...удалено, теперь OrderStatus — история статусов заказа...
+
+model OrderItem {
+  id        Int     @id @default(autoincrement())
+  order     Order   @relation(fields: [orderId], references: [id])
+  orderId   Int
+  product   Product @relation(fields: [productId], references: [id])
+  productId Int
+  quantity  Int
+  price     Float?
+}
