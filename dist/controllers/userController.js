@@ -9,9 +9,10 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getMe = exports.updateMe = exports.getAllUsers = void 0;
+exports.getMe = exports.updateMe = exports.changeUserRole = exports.getAllUsers = void 0;
 const client_1 = require("@prisma/client");
 const apiResponse_1 = require("../utils/apiResponse");
+const errorHandler_1 = require("../middlewares/errorHandler");
 const prisma = new client_1.PrismaClient();
 // Получить всех пользователей (только для администраторов)
 const getAllUsers = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
@@ -88,6 +89,59 @@ const getAllUsers = (req, res, next) => __awaiter(void 0, void 0, void 0, functi
     }
 });
 exports.getAllUsers = getAllUsers;
+// Изменить роль пользователя (только для администраторов)
+const changeUserRole = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { id } = req.params;
+        const { role } = req.body;
+        const userId = parseInt(id);
+        if (isNaN(userId)) {
+            throw new errorHandler_1.AppError('Неверный ID пользователя', 400);
+        }
+        // Валидация роли
+        const allowedRoles = ['CUSTOMER', 'COURIER', 'ADMIN'];
+        if (!allowedRoles.includes(role)) {
+            throw new errorHandler_1.AppError(`Роль должна быть одной из: ${allowedRoles.join(', ')}`, 400);
+        }
+        // Проверяем существование пользователя
+        const user = yield prisma.user.findUnique({
+            where: { id: userId },
+            select: { id: true, role: true, name: true, telegram_user_id: true }
+        });
+        if (!user) {
+            throw new errorHandler_1.AppError('Пользователь не найден', 404);
+        }
+        // Проверяем, что роль действительно изменяется
+        if (user.role === role) {
+            throw new errorHandler_1.AppError(`Пользователь уже имеет роль ${role}`, 400);
+        }
+        const oldRole = user.role;
+        // Обновляем роль пользователя
+        const updatedUser = yield prisma.user.update({
+            where: { id: userId },
+            data: { role },
+            select: { id: true, role: true, name: true, telegram_user_id: true }
+        });
+        // Инвалидируем кэш пользователей
+        // (здесь можно добавить инвалидацию кэша, если используется)
+        console.log(`👤 Роль пользователя ${userId} изменена с ${oldRole} на ${role} администратором ${req.user.id}`);
+        apiResponse_1.ApiResponseUtil.success(res, {
+            userId: updatedUser.id,
+            oldRole,
+            newRole: updatedUser.role,
+            updatedAt: new Date().toISOString(),
+            user: {
+                id: updatedUser.id,
+                name: updatedUser.name,
+                telegram_user_id: updatedUser.telegram_user_id
+            }
+        }, 'Роль пользователя успешно изменена');
+    }
+    catch (error) {
+        next(error);
+    }
+});
+exports.changeUserRole = changeUserRole;
 // PATCH /api/user/me — обновить имя и номер телефона
 const updateMe = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     if (!req.user)

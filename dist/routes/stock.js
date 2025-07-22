@@ -7,4 +7,5 @@ const router = (0, express_1.Router)();
 router.post('/movements', auth_1.authenticate, auth_1.isAdmin, stockController_1.createStockMovement);
 router.get('/:productId', auth_1.authenticate, auth_1.isAdmin, stockController_1.getStock);
 router.get('/history/:productId', auth_1.authenticate, auth_1.isAdmin, stockController_1.getStockHistory);
+router.put('/:productId', auth_1.authenticate, auth_1.isAdmin, stockController_1.updateStock);
 exports.default = router;
