@@ -73,9 +73,12 @@ app.use(compression({
   }
 }));
 
-// CORS настройки - разрешаем доступ из любых источников
+// CORS настройки - разрешаем доступ из разрешенных источников
 app.use(cors({
-  origin: true, // Разрешаем все источники
+  origin: process.env.ALLOWED_ORIGINS?.split(',') || [
+    'http://localhost:3000',
+    'https://eco-f-ifjiw.ondigitalocean.app'
+  ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token'],

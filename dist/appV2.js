@@ -2,6 +2,7 @@
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
+var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const dotenv_1 = __importDefault(require("dotenv"));
@@ -68,9 +69,12 @@ app.use((0, compression_1.default)({
         return compression_1.default.filter(req, res);
     }
 }));
-// CORS настройки - разрешаем доступ из любых источников
+// CORS настройки - разрешаем доступ из разрешенных источников
 app.use((0, cors_1.default)({
-    origin: true, // Разрешаем все источники
+    origin: ((_a = process.env.ALLOWED_ORIGINS) === null || _a === void 0 ? void 0 : _a.split(',')) || [
+        'http://localhost:3000',
+        'https://eco-f-ifjiw.ondigitalocean.app'
+    ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token'],

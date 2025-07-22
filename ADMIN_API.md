@@ -821,34 +821,40 @@ const changeUserRole = async (userId, newRole) => {
 ### cURL
 ```bash
 # Создание категории
-curl -X POST http://localhost:4000/api/categories \
+curl -X POST https://eco-b-6sgyz.ondigitalocean.app/api/categories \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer ADMIN_TOKEN" \
   -d '{"name": "Новая категория"}'
 
 # Обновление статуса заказа
-curl -X PUT http://localhost:4000/api/orders/123/status \
+curl -X PUT https://eco-b-6sgyz.ondigitalocean.app/api/orders/123/status \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer ADMIN_TOKEN" \
   -d '{"status": "CONFIRMED"}'
 
 # Получение статистики безопасности
-curl -X GET http://localhost:4000/security-stats \
+curl -X GET https://eco-b-6sgyz.ondigitalocean.app/security-stats \
   -H "Authorization: Bearer ADMIN_TOKEN"
 
 # Получение всех пользователей
-curl -X GET "http://localhost:4000/api/user/admin/all?page=1&limit=10&role=COURIER" \
+curl -X GET "https://eco-b-6sgyz.ondigitalocean.app/api/user/admin/all?page=1&limit=10&role=COURIER" \
   -H "Authorization: Bearer ADMIN_TOKEN"
 
 # Поиск пользователей по имени
-curl -X GET "http://localhost:4000/api/user/admin/all?search=Иван&page=1" \
+curl -X GET "https://eco-b-6sgyz.ondigitalocean.app/api/user/admin/all?search=Иван&page=1" \
   -H "Authorization: Bearer ADMIN_TOKEN"
 
 # Изменение роли пользователя
-curl -X POST http://localhost:4000/api/admin/users/5/role \
+curl -X POST https://eco-b-6sgyz.ondigitalocean.app/api/admin/users/5/role \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer ADMIN_TOKEN" \
   -d '{"role": "COURIER"}'
+
+# Обновление остатков товара на складе
+curl -X PUT https://eco-b-6sgyz.ondigitalocean.app/api/stock/3 \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer ADMIN_TOKEN" \
+  -d '{"quantity": 100, "type": "INCOME", "comment": "Поступление товара"}'
 ```
 
 ---
