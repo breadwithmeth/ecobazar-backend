@@ -8,9 +8,10 @@ import stockRoutes from './stock';
 import categoryRoutes from './category';
 import userRoutes from './user';
 import userAddressRoutes from './userAddress';
+import courierRoutes from './courier';
+import adminRoutes from './admin';
 
 const router = Router();
-
 
 router.use('/auth', authRoutes);
 router.use('/stores', storeRoutes);
@@ -20,5 +21,7 @@ router.use('/stock', stockRoutes);
 router.use('/categories', categoryRoutes);
 router.use('/user', userRoutes);
 router.use('/user', userAddressRoutes);
+router.use('/courier', courierRoutes);
+router.use('/admin', adminRoutes);
 
 export default router;

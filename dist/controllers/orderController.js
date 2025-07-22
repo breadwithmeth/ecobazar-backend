@@ -8,82 +8,269 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getOrders = exports.createOrder = exports.getAllOrders = void 0;
+exports.getOrder = exports.getOrders = exports.createOrder = exports.getAllOrders = void 0;
+const prisma_1 = __importDefault(require("../lib/prisma"));
+const errorHandler_1 = require("../middlewares/errorHandler");
+const apiResponse_1 = require("../utils/apiResponse");
+// Получить все заказы (только для ADMIN)
 const getAllOrders = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const orders = yield prisma.order.findMany({
-            orderBy: { createdAt: 'desc' },
+        const { page, limit, sortBy, sortOrder } = apiResponse_1.PaginationUtil.parseQuery(req.query);
+        const { skip, take } = apiResponse_1.PaginationUtil.getSkipTake(page, limit);
+        // Фильтрация по статусу
+        const statusFilter = req.query.status;
+        const whereClause = {};
+        if (statusFilter) {
+            whereClause.statuses = {
+                some: {
+                    status: statusFilter
+                }
+            };
+        }
+        const total = yield prisma_1.default.order.count({ where: whereClause });
+        const orders = yield prisma_1.default.order.findMany({
+            where: whereClause,
+            skip,
+            take,
+            orderBy: apiResponse_1.PaginationUtil.buildOrderBy(sortBy || 'createdAt', sortOrder || 'desc'),
             include: {
-                items: { include: { product: true } },
-                user: { include: { addresses: true } },
-                statuses: true
+                items: {
+                    include: {
+                        product: {
+                            select: { id: true, name: true, price: true, image: true }
+                        }
+                    }
+                },
+                user: {
+                    select: {
+                        id: true,
+                        telegram_user_id: true,
+                        name: true,
+                        phone_number: true
+                    }
+                },
+                statuses: {
+                    orderBy: { createdAt: 'desc' },
+                    select: { id: true, status: true, createdAt: true }
+                }
             }
         });
-        res.json(orders);
+        // Добавляем общую сумму и текущий статус к каждому заказу
+        const ordersWithDetails = orders.map(order => {
+            var _a;
+            return (Object.assign(Object.assign({}, order), { totalAmount: order.items.reduce((sum, item) => sum + (item.quantity * (item.price || 0)), 0), currentStatus: ((_a = order.statuses[0]) === null || _a === void 0 ? void 0 : _a.status) || null, itemsCount: order.items.length }));
+        });
+        apiResponse_1.ApiResponseUtil.paginated(res, ordersWithDetails, {
+            page: page || 1,
+            limit: limit || 10,
+            total
+        });
     }
-    catch (err) {
-        next(err);
+    catch (error) {
+        next(error);
     }
 });
 exports.getAllOrders = getAllOrders;
-const client_1 = require("@prisma/client");
-const prisma = new client_1.PrismaClient();
-const createOrder = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const { items, address } = req.body; // [{ productId, quantity }], address: string
-    if (!items || !Array.isArray(items) || items.length === 0)
-        return res.status(400).json({ message: 'Нет товаров в заказе' });
-    if (!address)
-        return res.status(400).json({ message: 'Адрес обязателен' });
-    const userId = req.user.id;
-    const order = yield prisma.order.create({
-        data: {
-            userId,
-            address,
-            items: {
-                create: items.map((item) => ({ productId: item.productId, quantity: item.quantity }))
-            }
-        },
-        include: { items: true }
-    });
-    // Списываем остатки
-    for (const item of items) {
-        yield prisma.stockMovement.create({
-            data: {
-                productId: item.productId,
-                quantity: item.quantity,
-                type: 'OUTCOME',
-                adminId: userId // пользователь, оформивший заказ
-            }
+const createOrder = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const { items, address } = req.body;
+        const userId = req.user.id;
+        // Проверяем все товары и их наличие
+        const productIds = items.map((item) => item.productId);
+        const products = yield prisma_1.default.product.findMany({
+            where: { id: { in: productIds } },
+            select: { id: true, name: true, price: true }
         });
+        if (products.length !== productIds.length) {
+            throw new errorHandler_1.AppError('Некоторые товары не найдены', 400);
+        }
+        // Проверяем остатки товаров
+        const movements = yield prisma_1.default.stockMovement.findMany({
+            where: { productId: { in: productIds } },
+            select: { productId: true, type: true, quantity: true }
+        });
+        const stockMap = new Map();
+        for (const movement of movements) {
+            const current = stockMap.get(movement.productId) || 0;
+            const change = movement.type === 'INCOME' ? movement.quantity : -movement.quantity;
+            stockMap.set(movement.productId, current + change);
+        }
+        // Проверяем, что всех товаров достаточно
+        for (const item of items) {
+            const availableStock = stockMap.get(item.productId) || 0;
+            if (availableStock < item.quantity) {
+                const product = products.find(p => p.id === item.productId);
+                throw new errorHandler_1.AppError(`Недостаточно товара "${product === null || product === void 0 ? void 0 : product.name}" на складе. Доступно: ${availableStock}`, 400);
+            }
+        }
+        // Создаем заказ в транзакции
+        const result = yield prisma_1.default.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
+            // Создаем заказ
+            const order = yield tx.order.create({
+                data: {
+                    userId,
+                    address: address.trim(),
+                    items: {
+                        create: items.map((item) => {
+                            const product = products.find(p => p.id === item.productId);
+                            return {
+                                productId: item.productId,
+                                quantity: item.quantity,
+                                price: product.price // Фиксируем цену на момент заказа
+                            };
+                        })
+                    }
+                },
+                include: {
+                    items: {
+                        include: {
+                            product: {
+                                select: { id: true, name: true, image: true }
+                            }
+                        }
+                    }
+                }
+            });
+            // Создаем начальный статус заказа
+            yield tx.orderStatus.create({
+                data: {
+                    orderId: order.id,
+                    status: 'NEW'
+                }
+            });
+            // Списываем товары со склада
+            for (const item of items) {
+                yield tx.stockMovement.create({
+                    data: {
+                        productId: item.productId,
+                        quantity: item.quantity,
+                        type: 'OUTCOME',
+                        adminId: userId // Записываем, кто сделал заказ
+                    }
+                });
+            }
+            return order;
+        }));
+        // Добавляем общую сумму заказа
+        const orderWithTotal = Object.assign(Object.assign({}, result), { totalAmount: result.items.reduce((sum, item) => sum + (item.quantity * (item.price || 0)), 0), status: 'NEW' });
+        apiResponse_1.ApiResponseUtil.created(res, orderWithTotal, 'Заказ успешно создан');
     }
-    res.status(201).json(order);
+    catch (error) {
+        next(error);
+    }
 });
 exports.createOrder = createOrder;
-const getOrders = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
-    const userId = req.user.id;
-    // Получаем только заказы, у которых последний статус не DELIVERED
-    const orders = yield prisma.order.findMany({
-        where: {
+const getOrders = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        const userId = req.user.id;
+        const { page, limit } = apiResponse_1.PaginationUtil.parseQuery(req.query);
+        const { skip, take } = apiResponse_1.PaginationUtil.getSkipTake(page, limit);
+        // Получаем заказы пользователя, исключая доставленные
+        const whereClause = {
             userId,
             statuses: {
-                some: {
-                    // Находим заказы, где есть хотя бы один статус НЕ DELIVERED
-                    NOT: { status: 'DELIVERED' }
+                every: {
+                    status: { not: 'DELIVERED' }
                 }
             }
-        },
-        include: {
-            items: { include: { product: true } },
-            statuses: { orderBy: { createdAt: 'desc' }, take: 1 } // только последний статус
-        }
-    });
-    // Для каждого заказа возвращаем только последний статус
-    const result = orders.map(order => {
-        var _a;
-        return (Object.assign(Object.assign({}, order), { status: ((_a = order.statuses[0]) === null || _a === void 0 ? void 0 : _a.status) || null, statuses: undefined // скрываем массив статусов
-         }));
-    });
-    res.json(result);
+        };
+        const total = yield prisma_1.default.order.count({ where: whereClause });
+        const orders = yield prisma_1.default.order.findMany({
+            where: whereClause,
+            skip,
+            take,
+            orderBy: { createdAt: 'desc' },
+            include: {
+                items: {
+                    include: {
+                        product: {
+                            select: { id: true, name: true, image: true }
+                        }
+                    }
+                },
+                statuses: {
+                    orderBy: { createdAt: 'desc' },
+                    take: 1,
+                    select: { status: true, createdAt: true }
+                }
+            }
+        });
+        // Для каждого заказа возвращаем только последний статус и общую сумму
+        const result = orders.map(order => {
+            var _a, _b;
+            return ({
+                id: order.id,
+                address: order.address,
+                createdAt: order.createdAt,
+                items: order.items,
+                totalAmount: order.items.reduce((sum, item) => sum + (item.quantity * (item.price || 0)), 0),
+                status: ((_a = order.statuses[0]) === null || _a === void 0 ? void 0 : _a.status) || null,
+                statusUpdatedAt: ((_b = order.statuses[0]) === null || _b === void 0 ? void 0 : _b.createdAt) || order.createdAt,
+                itemsCount: order.items.length
+            });
+        });
+        apiResponse_1.ApiResponseUtil.paginated(res, result, {
+            page: page || 1,
+            limit: limit || 10,
+            total
+        });
+    }
+    catch (error) {
+        next(error);
+    }
 });
 exports.getOrders = getOrders;
+const getOrder = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a;
+    try {
+        const { id } = req.params;
+        const orderId = parseInt(id);
+        const userId = req.user.id;
+        const isAdmin = req.user.role === 'ADMIN';
+        if (isNaN(orderId)) {
+            throw new errorHandler_1.AppError('Неверный ID заказа', 400);
+        }
+        const whereClause = { id: orderId };
+        // Обычные пользователи могут видеть только свои заказы
+        if (!isAdmin) {
+            whereClause.userId = userId;
+        }
+        const order = yield prisma_1.default.order.findUnique({
+            where: whereClause,
+            include: {
+                items: {
+                    include: {
+                        product: {
+                            select: { id: true, name: true, price: true, image: true }
+                        }
+                    }
+                },
+                user: isAdmin ? {
+                    select: {
+                        id: true,
+                        telegram_user_id: true,
+                        name: true,
+                        phone_number: true
+                    }
+                } : undefined,
+                statuses: {
+                    orderBy: { createdAt: 'asc' },
+                    select: { id: true, status: true, createdAt: true }
+                }
+            }
+        });
+        if (!order) {
+            throw new errorHandler_1.AppError('Заказ не найден', 404);
+        }
+        const orderWithDetails = Object.assign(Object.assign({}, order), { totalAmount: order.items.reduce((sum, item) => sum + (item.quantity * (item.price || 0)), 0), currentStatus: ((_a = order.statuses[order.statuses.length - 1]) === null || _a === void 0 ? void 0 : _a.status) || null, itemsCount: order.items.length });
+        apiResponse_1.ApiResponseUtil.success(res, orderWithDetails);
+    }
+    catch (error) {
+        next(error);
+    }
+});
+exports.getOrder = getOrder;

@@ -8,51 +8,131 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
         step((generator = generator.apply(thisArg, _arguments || [])).next());
     });
 };
-var __rest = (this && this.__rest) || function (s, e) {
-    var t = {};
-    for (var p in s) if (Object.prototype.hasOwnProperty.call(s, p) && e.indexOf(p) < 0)
-        t[p] = s[p];
-    if (s != null && typeof Object.getOwnPropertySymbols === "function")
-        for (var i = 0, p = Object.getOwnPropertySymbols(s); i < p.length; i++) {
-            if (e.indexOf(p[i]) < 0 && Object.prototype.propertyIsEnumerable.call(s, p[i]))
-                t[p[i]] = s[p[i]];
-        }
-    return t;
-};
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.isAdmin = exports.authenticate = void 0;
+exports.isOwnerOrAdmin = exports.isAdminOrCourier = exports.isCourier = exports.isAdmin = exports.authenticate = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
-const client_1 = require("@prisma/client");
-const prisma = new client_1.PrismaClient();
+const prisma_1 = __importDefault(require("../lib/prisma"));
+const errorHandler_1 = require("./errorHandler");
+const logger_1 = require("./logger");
 const authenticate = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
-    const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({ message: 'Нет токена' });
-    }
-    const token = authHeader.split(' ')[1];
     try {
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            logger_1.securityLogger.logFailedAuth(req, 'Missing or invalid authorization header');
+            throw new errorHandler_1.AppError('Токен не предоставлен', 401);
+        }
+        const token = authHeader.split(' ')[1];
+        if (!token) {
+            logger_1.securityLogger.logFailedAuth(req, 'Empty token');
+            throw new errorHandler_1.AppError('Токен не предоставлен', 401);
+        }
+        // Проверяем JWT токен
         const payload = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET);
-        const user = yield prisma.user.findUnique({ where: { id: payload.userId }, include: {} });
-        if (!user)
-            return res.status(401).json({ message: 'Пользователь не найден' });
-        // Remove password before attaching to req.user for security
-        const _a = user, { password } = _a, userWithoutPassword = __rest(_a, ["password"]);
-        req.user = userWithoutPassword;
+        // Проверяем существование пользователя
+        const user = yield prisma_1.default.user.findUnique({
+            where: { id: payload.userId },
+            select: {
+                id: true,
+                telegram_user_id: true,
+                phone_number: true,
+                role: true,
+                name: true
+            }
+        });
+        if (!user) {
+            logger_1.securityLogger.logFailedAuth(req, `User not found: ${payload.userId}`);
+            throw new errorHandler_1.AppError('Пользователь не найден', 401);
+        }
+        // Проверяем, что роль в токене соответствует роли в БД
+        if (user.role !== payload.role) {
+            logger_1.securityLogger.logFailedAuth(req, `Role mismatch for user: ${payload.userId}`);
+            throw new errorHandler_1.AppError('Недействительный токен', 401);
+        }
+        req.user = user;
         next();
     }
-    catch (e) {
-        return res.status(401).json({ message: 'Неверный токен' });
+    catch (error) {
+        if (error instanceof jsonwebtoken_1.default.JsonWebTokenError) {
+            logger_1.securityLogger.logFailedAuth(req, `Invalid JWT: ${error.message}`);
+            next(new errorHandler_1.AppError('Недействительный токен', 401));
+        }
+        else if (error instanceof jsonwebtoken_1.default.TokenExpiredError) {
+            logger_1.securityLogger.logFailedAuth(req, 'Expired JWT');
+            next(new errorHandler_1.AppError('Токен истек', 401));
+        }
+        else {
+            next(error);
+        }
     }
 });
 exports.authenticate = authenticate;
 const isAdmin = (req, res, next) => {
-    var _a;
-    if (((_a = req.user) === null || _a === void 0 ? void 0 : _a.role) !== 'ADMIN') {
-        return res.status(403).json({ message: 'Требуется роль администратора' });
+    try {
+        if (!req.user) {
+            throw new errorHandler_1.AppError('Пользователь не авторизован', 401);
+        }
+        if (req.user.role !== 'ADMIN') {
+            logger_1.securityLogger.logUnauthorizedAccess(req, 'Admin endpoint');
+            throw new errorHandler_1.AppError('Требуется роль администратора', 403);
+        }
+        next();
     }
-    next();
+    catch (error) {
+        next(error);
+    }
 };
 exports.isAdmin = isAdmin;
+const isCourier = (req, res, next) => {
+    try {
+        if (!req.user) {
+            throw new errorHandler_1.AppError('Пользователь не авторизован', 401);
+        }
+        if (req.user.role !== 'COURIER') {
+            logger_1.securityLogger.logUnauthorizedAccess(req, 'Courier endpoint');
+            throw new errorHandler_1.AppError('Требуется роль курьера', 403);
+        }
+        next();
+    }
+    catch (error) {
+        next(error);
+    }
+};
+exports.isCourier = isCourier;
+const isAdminOrCourier = (req, res, next) => {
+    try {
+        if (!req.user) {
+            throw new errorHandler_1.AppError('Пользователь не авторизован', 401);
+        }
+        if (req.user.role !== 'ADMIN' && req.user.role !== 'COURIER') {
+            logger_1.securityLogger.logUnauthorizedAccess(req, 'Admin/Courier endpoint');
+            throw new errorHandler_1.AppError('Требуется роль администратора или курьера', 403);
+        }
+        next();
+    }
+    catch (error) {
+        next(error);
+    }
+};
+exports.isAdminOrCourier = isAdminOrCourier;
+const isOwnerOrAdmin = (getUserId) => {
+    return (req, res, next) => {
+        try {
+            if (!req.user) {
+                throw new errorHandler_1.AppError('Пользователь не авторизован', 401);
+            }
+            const resourceUserId = getUserId(req);
+            if (req.user.role !== 'ADMIN' && req.user.id !== resourceUserId) {
+                logger_1.securityLogger.logUnauthorizedAccess(req, `Resource belonging to user ${resourceUserId}`);
+                throw new errorHandler_1.AppError('Доступ запрещен', 403);
+            }
+            next();
+        }
+        catch (error) {
+            next(error);
+        }
+    };
+};
+exports.isOwnerOrAdmin = isOwnerOrAdmin;

@@ -1,0 +1,163 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.schemas = exports.validateParams = exports.validateBody = void 0;
+const errorHandler_1 = require("./errorHandler");
+const validateBody = (schema) => {
+    return (req, res, next) => {
+        try {
+            const errors = [];
+            for (const [field, rules] of Object.entries(schema)) {
+                const value = req.body[field];
+                // Проверка обязательности
+                if (rules.required && (value === undefined || value === null || value === '')) {
+                    errors.push(`Поле ${field} обязательно`);
+                    continue;
+                }
+                // Если поле не обязательное и пустое, пропускаем остальные проверки
+                if (!rules.required && (value === undefined || value === null || value === '')) {
+                    continue;
+                }
+                // Проверка типа
+                if (rules.type && !checkType(value, rules.type)) {
+                    errors.push(`Поле ${field} должно быть типа ${rules.type}`);
+                    continue;
+                }
+                // Проверка минимальной длины
+                if (rules.minLength && typeof value === 'string' && value.length < rules.minLength) {
+                    errors.push(`Поле ${field} должно содержать минимум ${rules.minLength} символов`);
+                }
+                // Проверка максимальной длины
+                if (rules.maxLength && typeof value === 'string' && value.length > rules.maxLength) {
+                    errors.push(`Поле ${field} должно содержать максимум ${rules.maxLength} символов`);
+                }
+                // Проверка минимального значения
+                if (rules.min && typeof value === 'number' && value < rules.min) {
+                    errors.push(`Поле ${field} должно быть больше или равно ${rules.min}`);
+                }
+                // Проверка максимального значения
+                if (rules.max && typeof value === 'number' && value > rules.max) {
+                    errors.push(`Поле ${field} должно быть меньше или равно ${rules.max}`);
+                }
+                // Проверка регулярного выражения
+                if (rules.pattern && typeof value === 'string' && !rules.pattern.test(value)) {
+                    errors.push(`Поле ${field} имеет неверный формат`);
+                }
+                // Кастомная валидация
+                if (rules.custom) {
+                    const result = rules.custom(value);
+                    if (typeof result === 'string') {
+                        errors.push(result);
+                    }
+                    else if (!result) {
+                        errors.push(`Поле ${field} не прошло валидацию`);
+                    }
+                }
+            }
+            if (errors.length > 0) {
+                throw new errorHandler_1.AppError(`Ошибки валидации: ${errors.join(', ')}`, 400);
+            }
+            next();
+        }
+        catch (error) {
+            next(error);
+        }
+    };
+};
+exports.validateBody = validateBody;
+const validateParams = (schema) => {
+    return (req, res, next) => {
+        try {
+            const errors = [];
+            for (const [field, rules] of Object.entries(schema)) {
+                const value = req.params[field];
+                if (rules.required && !value) {
+                    errors.push(`Параметр ${field} обязателен`);
+                    continue;
+                }
+                if (rules.type && value && !checkType(value, rules.type)) {
+                    errors.push(`Параметр ${field} должен быть типа ${rules.type}`);
+                }
+                if (rules.custom && value) {
+                    const result = rules.custom(value);
+                    if (typeof result === 'string') {
+                        errors.push(result);
+                    }
+                    else if (!result) {
+                        errors.push(`Параметр ${field} не прошел валидацию`);
+                    }
+                }
+            }
+            if (errors.length > 0) {
+                throw new errorHandler_1.AppError(`Ошибки валидации параметров: ${errors.join(', ')}`, 400);
+            }
+            next();
+        }
+        catch (error) {
+            next(error);
+        }
+    };
+};
+exports.validateParams = validateParams;
+function checkType(value, expectedType) {
+    switch (expectedType) {
+        case 'string':
+            return typeof value === 'string';
+        case 'number':
+            return typeof value === 'number' && !isNaN(value);
+        case 'boolean':
+            return typeof value === 'boolean';
+        case 'array':
+            return Array.isArray(value);
+        case 'object':
+            return typeof value === 'object' && value !== null && !Array.isArray(value);
+        default:
+            return true;
+    }
+}
+// Предустановленные схемы валидации
+exports.schemas = {
+    id: {
+        id: {
+            required: true,
+            custom: (value) => {
+                const id = parseInt(value);
+                return !isNaN(id) && id > 0;
+            }
+        }
+    },
+    createProduct: {
+        name: { required: true, type: 'string', minLength: 1, maxLength: 200 },
+        price: { required: true, type: 'number', min: 0 },
+        storeId: { required: true, type: 'number', min: 1 },
+        image: { type: 'string', maxLength: 500 },
+        categoryId: { type: 'number', min: 1 }
+    },
+    createOrder: {
+        items: {
+            required: true,
+            type: 'array',
+            custom: (items) => {
+                if (!Array.isArray(items) || items.length === 0) {
+                    return 'Заказ должен содержать хотя бы один товар';
+                }
+                for (const item of items) {
+                    if (!item.productId || !item.quantity || item.quantity <= 0) {
+                        return 'Каждый товар должен иметь productId и quantity > 0';
+                    }
+                }
+                return true;
+            }
+        },
+        address: { required: true, type: 'string', minLength: 5, maxLength: 500 }
+    },
+    updateUser: {
+        name: { type: 'string', minLength: 1, maxLength: 100 },
+        phone_number: {
+            type: 'string',
+            pattern: /^\+?[1-9]\d{1,14}$/
+        }
+    },
+    createCategory: {
+        name: { required: true, type: 'string', minLength: 1, maxLength: 100 }
+    }
+};
