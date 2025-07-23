@@ -135,12 +135,12 @@ const validateUserAgent = (req, res, next) => {
     next();
 };
 exports.validateUserAgent = validateUserAgent;
-// Middleware для администраторских эндпоинтов
-exports.adminRateLimit = (0, exports.rateLimit)({
-    windowMs: 15 * 60 * 1000, // 15 минут
-    max: 200, // 200 запросов на 15 минут для админов
-    message: 'Слишком много административных действий'
-});
+// Middleware для администраторских эндпоинтов (ОТКЛЮЧЕН - без ограничений)
+const adminRateLimit = (req, res, next) => {
+    // Пропускаем без ограничений для админов
+    next();
+};
+exports.adminRateLimit = adminRateLimit;
 // Middleware для публичных эндпоинтов
 exports.publicRateLimit = (0, exports.rateLimit)({
     windowMs: 15 * 60 * 1000, // 15 минут

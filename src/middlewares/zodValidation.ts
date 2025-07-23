@@ -12,7 +12,9 @@ export const validateBody = <T>(schema: z.ZodSchema<T>) => {
         );
         throw new AppError(`Ошибки валидации тела запроса: ${errors.join(', ')}`, 400);
       }
+      // Сохраняем в оба места для совместимости
       req.body = result.data;
+      (req as any).validatedBody = result.data;
       next();
     } catch (error) {
       next(error);

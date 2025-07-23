@@ -1,7 +1,6 @@
 import { Router } from 'express';
 import { getMe, updateMe, getAllUsers } from '../controllers/userController';
 import { authenticate, isAdmin } from '../middlewares/auth';
-import { adminRateLimit } from '../middlewares/security';
 
 const router = Router();
 
@@ -13,7 +12,6 @@ router.patch('/me', authenticate, updateMe);
 
 // Получить всех пользователей (только для администраторов)
 router.get('/admin/all', 
-  adminRateLimit,
   authenticate, 
   isAdmin, 
   getAllUsers

@@ -87,8 +87,8 @@ export class PaginationUtil {
   static parseQuery(query: any): PaginationOptions {
     const page = parseInt(query.page) || 1;
     const limit = Math.min(parseInt(query.limit) || 10, 100); // Максимум 100 записей
-    const sortBy = query.sortBy || 'id';
-    const sortOrder = query.sortOrder === 'desc' ? 'desc' : 'asc';
+    const sortBy = query.sortBy || 'createdAt'; // По умолчанию сортируем по дате создания
+    const sortOrder = query.sortOrder === 'asc' ? 'asc' : 'desc'; // По умолчанию сортируем от новых к старым
     
     return { page, limit, sortBy, sortOrder };
   }

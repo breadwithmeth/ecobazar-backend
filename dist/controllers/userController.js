@@ -62,7 +62,7 @@ const getAllUsers = (req, res, next) => __awaiter(void 0, void 0, void 0, functi
                         statuses: {
                             some: {
                                 status: {
-                                    in: ['CONFIRMED', 'PREPARING', 'READY', 'DELIVERING']
+                                    in: ['WAITING_PAYMENT', 'PREPARING', 'DELIVERING']
                                 }
                             }
                         }
@@ -99,7 +99,7 @@ const changeUserRole = (req, res, next) => __awaiter(void 0, void 0, void 0, fun
             throw new errorHandler_1.AppError('Неверный ID пользователя', 400);
         }
         // Валидация роли
-        const allowedRoles = ['CUSTOMER', 'COURIER', 'ADMIN'];
+        const allowedRoles = ['CUSTOMER', 'COURIER', 'ADMIN', 'SELLER'];
         if (!allowedRoles.includes(role)) {
             throw new errorHandler_1.AppError(`Роль должна быть одной из: ${allowedRoles.join(', ')}`, 400);
         }

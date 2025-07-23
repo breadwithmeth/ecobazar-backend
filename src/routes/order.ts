@@ -3,7 +3,6 @@ import { createOrder, getOrders, getAllOrders, getOrder } from '../controllers/o
 import { updateOrderStatus } from '../controllers/orderStatusController';
 import { authenticate, isAdmin } from '../middlewares/auth';
 import { validateBody, validateParams, schemas } from '../middlewares/validation';
-import { adminRateLimit } from '../middlewares/security';
 
 const router = Router();
 
@@ -26,7 +25,6 @@ router.get('/:id',
 
 // Получить все заказы (только для администраторов)
 router.get('/admin/all', 
-  adminRateLimit,
   authenticate, 
   isAdmin, 
   getAllOrders
@@ -34,7 +32,6 @@ router.get('/admin/all',
 
 // Изменить статус заказа (только для администраторов)
 router.put('/:id/status', 
-  adminRateLimit,
   authenticate, 
   isAdmin, 
   validateParams(schemas.id),
@@ -43,7 +40,7 @@ router.put('/:id/status',
       required: true, 
       type: 'string' as const,
       custom: (value: string) => {
-        const allowedStatuses = ['NEW', 'WAITING_PAYMENT', 'ASSEMBLY', 'SHIPPING', 'DELIVERED'];
+        const allowedStatuses = ['NEW', 'WAITING_PAYMENT', 'PREPARING', 'DELIVERING', 'DELIVERED', 'CANCELLED'];
         return allowedStatuses.includes(value) || `Статус должен быть одним из: ${allowedStatuses.join(', ')}`;
       }
     }

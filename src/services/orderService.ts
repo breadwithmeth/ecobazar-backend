@@ -8,6 +8,7 @@ import {
   OrderStatus 
 } from '../types';
 import { PaginationUtil, FilterUtil } from '../utils/apiResponse';
+import { telegramService } from './telegramService';
 
 export class OrderService {
   async createOrder(userId: number, data: CreateOrderRequest) {
@@ -71,11 +72,32 @@ export class OrderService {
         })
       );
 
+      // Создаем записи для подтверждения магазинами
+      const productsWithStores = await tx.product.findMany({
+        where: { id: { in: productIds } },
+        select: { id: true, storeId: true }
+      });
+
+      await Promise.all(
+        orderItems.map(async (orderItem) => {
+          const product = productsWithStores.find(p => p.id === orderItem.productId);
+          if (product) {
+            await tx.storeOrderConfirmation.create({
+              data: {
+                orderItemId: orderItem.id,
+                storeId: product.storeId,
+                status: 'PENDING'
+              }
+            });
+          }
+        })
+      );
+
       // Создаем начальный статус
       await tx.orderStatus.create({
         data: {
           orderId: newOrder.id,
-          status: OrderStatus.PENDING
+          status: OrderStatus.NEW
         }
       });
 
@@ -94,6 +116,17 @@ export class OrderService {
       );
 
       return { ...newOrder, items: orderItems };
+    }, {
+      timeout: 15000 // Увеличиваем таймаут до 15 секунд
+    });
+
+    // Отправляем Telegram уведомления продавцам асинхронно
+    setImmediate(async () => {
+      try {
+        await telegramService.sendNewOrderNotifications(order.id);
+      } catch (error) {
+        console.error('Ошибка отправки Telegram уведомлений:', error);
+      }
     });
 
     return this.getOrderById(order.id, userId, false);
@@ -177,7 +210,7 @@ export class OrderService {
     const ordersWithDetails = orders.map(order => ({
       ...order,
       totalAmount: order.items.reduce((sum, item) => sum + (item.quantity * (item.price || 0)), 0),
-      status: order.statuses[0]?.status || OrderStatus.PENDING,
+      status: order.statuses[0]?.status || OrderStatus.NEW,
       statusUpdatedAt: order.statuses[0]?.createdAt || order.createdAt,
       itemsCount: order.items.length
     }));
@@ -233,7 +266,7 @@ export class OrderService {
     return {
       ...order,
       totalAmount: order.items.reduce((sum, item) => sum + (item.quantity * (item.price || 0)), 0),
-      currentStatus: order.statuses[order.statuses.length - 1]?.status || OrderStatus.PENDING
+      currentStatus: order.statuses[order.statuses.length - 1]?.status || OrderStatus.NEW
     };
   }
 
@@ -252,12 +285,23 @@ export class OrderService {
       throw new AppError('Неверный статус заказа', 400);
     }
 
-    return prisma.orderStatus.create({
+    const orderStatus = await prisma.orderStatus.create({
       data: {
         orderId,
         status
       }
     });
+
+    // Отправляем Telegram уведомление о смене статуса асинхронно
+    setImmediate(async () => {
+      try {
+        await telegramService.sendOrderStatusUpdate(orderId, status);
+      } catch (error) {
+        console.error('Ошибка отправки уведомления о статусе заказа:', error);
+      }
+    });
+
+    return orderStatus;
   }
 
   async getOrderStatuses(orderId: number) {

@@ -109,7 +109,7 @@ exports.updateOrderStatus = [
             const { status } = req.body;
             const orderStatus = yield orderService.updateOrderStatus(id, status);
             // Инвалидируем кэш заказов
-            cache_1.cacheService.invalidatePattern(`*order*:${id}*`);
+            cache_1.cacheService.invalidatePattern(`*order:${id}*`);
             cache_1.cacheService.invalidatePattern('orders:*');
             cache_1.cacheService.invalidatePattern('admin:orders:*');
             apiResponse_1.ApiResponseUtil.success(res, orderStatus, 'Статус заказа обновлен');

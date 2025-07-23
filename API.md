@@ -272,7 +272,7 @@ Authorization: Bearer <your_jwt_token>
         "userId": 1,
         "totalPrice": 599.97,
         "address": "ул. Примерная, 123",
-        "status": "PENDING",
+        "status": "NEW",
         "items": [
           {
             "id": 1,
@@ -333,7 +333,7 @@ Authorization: Bearer <your_jwt_token>
     "userId": 1,
     "totalPrice": 399.98,
     "address": "ул. Примерная, 123, кв. 45",
-    "status": "PENDING",
+    "status": "NEW",
     "items": [
       {
         "id": 2,
@@ -366,15 +366,15 @@ Authorization: Bearer <your_jwt_token>
 **Тело запроса:**
 ```json
 {
-  "status": "CONFIRMED"
+  "status": "PREPARING"
 }
 ```
 
 **Доступные статусы:**
-- `PENDING` - В ожидании
-- `CONFIRMED` - Подтвержден
-- `PROCESSING` - В обработке
-- `SHIPPED` - Отправлен
+- `NEW` - Новый заказ
+- `WAITING_PAYMENT` - Ожидание оплаты
+- `PREPARING` - Подготовка заказа
+- `DELIVERING` - Доставляется
 - `DELIVERED` - Доставлен
 - `CANCELLED` - Отменен
 
@@ -676,7 +676,7 @@ Authorization: Bearer <your_jwt_token>
         "id": 1,
         "totalPrice": 599.97,
         "address": "ул. Примерная, 123, кв. 45",
-        "status": "SHIPPED",
+        "status": "DELIVERING",
         "user": {
           "phone": "+1234567890"
         },
@@ -760,7 +760,7 @@ Authorization: Bearer <your_jwt_token>
   "data": {
     "id": 15,
     "courierId": 1,
-    "status": "SHIPPED",
+    "status": "DELIVERING",
     "courier": {
       "id": 1,
       "telegram_user_id": "987654321",

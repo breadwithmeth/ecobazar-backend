@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.isOwnerOrAdmin = exports.isAdminOrCourier = exports.isCourier = exports.isAdmin = exports.authenticate = void 0;
+exports.isOwnerOrAdmin = exports.isAdminOrCourier = exports.isSeller = exports.isCourier = exports.isAdmin = exports.authenticate = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const errorHandler_1 = require("./errorHandler");
@@ -101,6 +101,22 @@ const isCourier = (req, res, next) => {
     }
 };
 exports.isCourier = isCourier;
+const isSeller = (req, res, next) => {
+    try {
+        if (!req.user) {
+            throw new errorHandler_1.AppError('Пользователь не авторизован', 401);
+        }
+        if (req.user.role !== 'SELLER') {
+            logger_1.securityLogger.logUnauthorizedAccess(req, 'Seller endpoint');
+            throw new errorHandler_1.AppError('Требуется роль продавца', 403);
+        }
+        next();
+    }
+    catch (error) {
+        next(error);
+    }
+};
+exports.isSeller = isSeller;
 const isAdminOrCourier = (req, res, next) => {
     try {
         if (!req.user) {

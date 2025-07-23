@@ -148,7 +148,36 @@ exports.schemas = {
                 return true;
             }
         },
-        address: { required: true, type: 'string', minLength: 5, maxLength: 500 }
+        address: { required: true, type: 'string', minLength: 5, maxLength: 500 },
+        deliveryType: {
+            required: false,
+            type: 'string',
+            custom: (value) => {
+                if (!value)
+                    return true; // Опциональное поле
+                const allowedTypes = ['ASAP', 'SCHEDULED'];
+                return allowedTypes.includes(value) || `Тип доставки должен быть одним из: ${allowedTypes.join(', ')}`;
+            }
+        },
+        scheduledDate: {
+            required: false,
+            type: 'string',
+            custom: (value) => {
+                if (!value)
+                    return true; // Если значение не передано, это валидно
+                const date = new Date(value);
+                if (isNaN(date.getTime())) {
+                    return 'Неверный формат даты и времени';
+                }
+                const now = new Date();
+                const minDate = new Date(now.getTime() + 30 * 60 * 1000); // Минимум через 30 минут
+                const maxDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // Максимум через 7 дней
+                if (date < minDate || date > maxDate) {
+                    return 'Дата доставки должна быть от 30 минут до 7 дней от текущего времени';
+                }
+                return true;
+            }
+        }
     },
     updateUser: {
         name: { type: 'string', minLength: 1, maxLength: 100 },

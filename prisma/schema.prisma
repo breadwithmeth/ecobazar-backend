@@ -28,6 +28,10 @@ model User {
   name             String?
   stockMovements   StockMovement[] @relation("AdminStockMovements")
   deliveredOrders  Order[] @relation("CourierOrders")
+  ownedStore       Store? @relation("StoreOwner")
+  storeConfirmations StoreOrderConfirmation[] @relation("StoreConfirmations")
+  deliveryRatings  DeliveryRating[] // Оценки, поставленные пользователем
+  receivedRatings  DeliveryRating[] @relation("CourierRatings") // Оценки, полученные курьером
 }
 
 model UserAddress {
@@ -41,6 +45,12 @@ enum Role {
   ADMIN
   CUSTOMER
   COURIER
+  SELLER
+}
+
+enum DeliveryType {
+  ASAP        // Как можно быстрее
+  SCHEDULED   // Запланированная доставка
 }
 
 model Store {
@@ -48,6 +58,9 @@ model Store {
   name    String
   address String
   products Product[]
+  owner   User?    @relation("StoreOwner", fields: [ownerId], references: [id])
+  ownerId Int?     @unique
+  orderConfirmations StoreOrderConfirmation[]
 }
 
 model Product {
@@ -82,15 +95,18 @@ enum StockMovementType {
 }
 
 model Order {
-  id        Int         @id @default(autoincrement())
-  user      User        @relation(fields: [userId], references: [id])
-  userId    Int
-  address   String?
-  createdAt DateTime    @default(now())
-  items     OrderItem[]
-  statuses  OrderStatus[]
-  courier   User?       @relation("CourierOrders", fields: [courierId], references: [id])
-  courierId Int?
+  id              Int         @id @default(autoincrement())
+  user            User        @relation(fields: [userId], references: [id])
+  userId          Int
+  address         String?
+  createdAt       DateTime    @default(now())
+  items           OrderItem[]
+  statuses        OrderStatus[]
+  courier         User?       @relation("CourierOrders", fields: [courierId], references: [id])
+  courierId       Int?
+  deliveryType    DeliveryType @default(ASAP)
+  scheduledDate   DateTime?    // Дата и время доставки (если deliveryType = SCHEDULED)
+  deliveryRating  DeliveryRating? // Оценка доставки
 }
 
 model OrderStatus {
@@ -111,4 +127,54 @@ model OrderItem {
   productId Int
   quantity  Int
   price     Float?
+  storeConfirmation StoreOrderConfirmation?
+}
+
+model StoreOrderConfirmation {
+  id          Int      @id @default(autoincrement())
+  orderItem   OrderItem @relation(fields: [orderItemId], references: [id])
+  orderItemId Int      @unique
+  store       Store    @relation(fields: [storeId], references: [id])
+  storeId     Int
+  status      StoreConfirmationStatus @default(PENDING)
+  confirmedQuantity Int?
+  notes       String?
+  confirmedAt DateTime?
+  confirmedBy User?    @relation("StoreConfirmations", fields: [confirmedById], references: [id])
+  confirmedById Int?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+enum StoreConfirmationStatus {
+  PENDING     
+  CONFIRMED   
+  PARTIAL     
+  REJECTED    
+}
+
+model TelegramUserState {
+  id               Int      @id @default(autoincrement())
+  telegram_user_id String   @unique
+  state            String   // 'waiting_quantity_input', 'idle', etc.
+  data             Json?    // Дополнительные данные (confirmationId, productName, etc.)
+  createdAt        DateTime @default(now())
+  expiresAt        DateTime
+  
+  @@index([expiresAt])
+}
+
+model DeliveryRating {
+  id          Int      @id @default(autoincrement())
+  order       Order    @relation(fields: [orderId], references: [id])
+  orderId     Int      @unique
+  user        User     @relation(fields: [userId], references: [id])
+  userId      Int
+  courier     User?    @relation("CourierRatings", fields: [courierId], references: [id])
+  courierId   Int?
+  quality     Int      // Оценка качества (1-5)
+  speed       Int      // Оценка скорости (1-5)
+  impression  Int      // Общее впечатление (1-5)
+  comment     String?  // Дополнительный комментарий
+  createdAt   DateTime @default(now())
 }

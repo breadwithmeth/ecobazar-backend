@@ -4,6 +4,7 @@ import { AppError } from '../middlewares/errorHandler';
 import { ApiResponseUtil } from '../utils/apiResponse';
 import { PaginationUtil } from '../utils/pagination';
 import prisma from '../lib/prisma';
+import { telegramService } from '../services/telegramService';
 
 // Получить заказы курьера
 export const getCourierOrders = async (req: AuthRequest, res: Response, next: NextFunction) => {
@@ -211,6 +212,15 @@ export const assignCourierToOrder = async (req: AuthRequest, res: Response, next
       }
     });
     
+    // Отправляем уведомление курьеру асинхронно
+    setImmediate(async () => {
+      try {
+        await telegramService.sendCourierAssignmentNotification(orderId, courierId);
+      } catch (error) {
+        console.error('Ошибка отправки уведомления курьеру:', error);
+      }
+    });
+    
     ApiResponseUtil.success(res, updatedOrder, 'Курьер успешно назначен на заказ');
   } catch (error) {
     next(error);
@@ -278,7 +288,7 @@ export const getCourierStats = async (req: AuthRequest, res: Response, next: Nex
         statuses: {
           some: { 
             status: { 
-              in: ['CONFIRMED', 'PREPARING', 'READY', 'DELIVERING'] 
+              in: ['WAITING_PAYMENT', 'PREPARING', 'DELIVERING'] 
             }
           }
         }

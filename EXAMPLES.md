@@ -212,7 +212,7 @@ const order = await orderService.createOrder({
 const myOrders = await orderService.getMyOrders();
 
 // Обновить статус заказа (только для админов)
-// await orderService.updateOrderStatus(1, 'CONFIRMED');
+// await orderService.updateOrderStatus(1, 'PREPARING');
 ```
 
 ## 📊 Мониторинг и метрики
@@ -552,7 +552,7 @@ export function ProductList() {
         {products.map(product => (
           <div key={product.id} className="product-card">
             <h3>{product.name}</h3>
-            <p>💰 {product.price} ₽</p>
+            <p>💰 {product.price} ₸</p>
             <p>🏪 {product.store?.name}</p>
             <p>📦 {product.stock > 0 ? `В наличии: ${product.stock}` : 'Нет в наличии'}</p>
           </div>

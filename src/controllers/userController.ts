@@ -62,7 +62,7 @@ export const getAllUsers = async (req: AuthRequest, res: Response, next: NextFun
               statuses: {
                 some: { 
                   status: { 
-                    in: ['CONFIRMED', 'PREPARING', 'READY', 'DELIVERING'] 
+                    in: ['WAITING_PAYMENT', 'PREPARING', 'DELIVERING'] 
                   }
                 }
               }
@@ -110,7 +110,7 @@ export const changeUserRole = async (req: AuthRequest, res: Response, next: Next
     }
     
     // Валидация роли
-    const allowedRoles = ['CUSTOMER', 'COURIER', 'ADMIN'];
+    const allowedRoles = ['CUSTOMER', 'COURIER', 'ADMIN', 'SELLER'];
     if (!allowedRoles.includes(role)) {
       throw new AppError(`Роль должна быть одной из: ${allowedRoles.join(', ')}`, 400);
     }

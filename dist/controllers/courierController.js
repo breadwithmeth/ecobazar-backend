@@ -17,6 +17,7 @@ const errorHandler_1 = require("../middlewares/errorHandler");
 const apiResponse_1 = require("../utils/apiResponse");
 const pagination_1 = require("../utils/pagination");
 const prisma_1 = __importDefault(require("../lib/prisma"));
+const telegramService_1 = require("../services/telegramService");
 // Получить заказы курьера
 const getCourierOrders = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -200,6 +201,15 @@ const assignCourierToOrder = (req, res, next) => __awaiter(void 0, void 0, void 
                 }
             }
         });
+        // Отправляем уведомление курьеру асинхронно
+        setImmediate(() => __awaiter(void 0, void 0, void 0, function* () {
+            try {
+                yield telegramService_1.telegramService.sendCourierAssignmentNotification(orderId, courierId);
+            }
+            catch (error) {
+                console.error('Ошибка отправки уведомления курьеру:', error);
+            }
+        }));
         apiResponse_1.ApiResponseUtil.success(res, updatedOrder, 'Курьер успешно назначен на заказ');
     }
     catch (error) {
@@ -262,7 +272,7 @@ const getCourierStats = (req, res, next) => __awaiter(void 0, void 0, void 0, fu
                 statuses: {
                     some: {
                         status: {
-                            in: ['CONFIRMED', 'PREPARING', 'READY', 'DELIVERING']
+                            in: ['WAITING_PAYMENT', 'PREPARING', 'DELIVERING']
                         }
                     }
                 }

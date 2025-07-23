@@ -16,6 +16,7 @@ exports.getOrder = exports.getOrders = exports.createOrder = exports.getAllOrder
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const errorHandler_1 = require("../middlewares/errorHandler");
 const apiResponse_1 = require("../utils/apiResponse");
+const telegramService_1 = require("../services/telegramService");
 // Получить все заказы (только для ADMIN)
 const getAllOrders = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     try {
@@ -36,12 +37,27 @@ const getAllOrders = (req, res, next) => __awaiter(void 0, void 0, void 0, funct
             where: whereClause,
             skip,
             take,
-            orderBy: apiResponse_1.PaginationUtil.buildOrderBy(sortBy || 'createdAt', sortOrder || 'desc'),
+            orderBy: apiResponse_1.PaginationUtil.buildOrderBy(sortBy || 'createdAt', sortOrder || 'desc'), // Сортировка: новые заказы первыми
             include: {
                 items: {
                     include: {
                         product: {
                             select: { id: true, name: true, price: true, image: true }
+                        },
+                        storeConfirmation: {
+                            select: {
+                                id: true,
+                                status: true,
+                                confirmedQuantity: true,
+                                confirmedAt: true,
+                                notes: true,
+                                store: {
+                                    select: { id: true, name: true }
+                                },
+                                confirmedBy: {
+                                    select: { id: true, name: true }
+                                }
+                            }
                         }
                     }
                 },
@@ -53,6 +69,14 @@ const getAllOrders = (req, res, next) => __awaiter(void 0, void 0, void 0, funct
                         phone_number: true
                     }
                 },
+                courier: {
+                    select: {
+                        id: true,
+                        name: true,
+                        telegram_user_id: true,
+                        phone_number: true
+                    }
+                },
                 statuses: {
                     orderBy: { createdAt: 'desc' },
                     select: { id: true, status: true, createdAt: true }
@@ -60,9 +84,39 @@ const getAllOrders = (req, res, next) => __awaiter(void 0, void 0, void 0, funct
             }
         });
         // Добавляем общую сумму и текущий статус к каждому заказу
-        const ordersWithDetails = orders.map(order => {
+        const ordersWithDetails = orders.map((order) => {
             var _a;
-            return (Object.assign(Object.assign({}, order), { totalAmount: order.items.reduce((sum, item) => sum + (item.quantity * (item.price || 0)), 0), currentStatus: ((_a = order.statuses[0]) === null || _a === void 0 ? void 0 : _a.status) || null, itemsCount: order.items.length }));
+            const totalAmount = order.items.reduce((sum, item) => sum + (item.quantity * (item.price || 0)), 0);
+            // Подсчитываем статистику подтверждений
+            const confirmationStats = {
+                pending: 0,
+                confirmed: 0,
+                partial: 0,
+                rejected: 0,
+                total: order.items.length
+            };
+            order.items.forEach((item) => {
+                if (item.storeConfirmation) {
+                    switch (item.storeConfirmation.status) {
+                        case 'PENDING':
+                            confirmationStats.pending++;
+                            break;
+                        case 'CONFIRMED':
+                            confirmationStats.confirmed++;
+                            break;
+                        case 'PARTIAL':
+                            confirmationStats.partial++;
+                            break;
+                        case 'REJECTED':
+                            confirmationStats.rejected++;
+                            break;
+                    }
+                }
+                else {
+                    confirmationStats.pending++;
+                }
+            });
+            return Object.assign(Object.assign({}, order), { deliveryType: order.deliveryType, scheduledDate: order.scheduledDate, totalAmount, currentStatus: ((_a = order.statuses[0]) === null || _a === void 0 ? void 0 : _a.status) || null, itemsCount: order.items.length, confirmationStats });
         });
         apiResponse_1.ApiResponseUtil.paginated(res, ordersWithDetails, {
             page: page || 1,
@@ -77,8 +131,12 @@ const getAllOrders = (req, res, next) => __awaiter(void 0, void 0, void 0, funct
 exports.getAllOrders = getAllOrders;
 const createOrder = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { items, address } = req.body;
+        const { items, address, deliveryType = 'ASAP', scheduledDate } = req.body;
         const userId = req.user.id;
+        // Дополнительная валидация для запланированной доставки
+        if (deliveryType === 'SCHEDULED' && !scheduledDate) {
+            throw new errorHandler_1.AppError('При выборе запланированной доставки необходимо указать дату и время', 400);
+        }
         // Проверяем все товары и их наличие
         const productIds = items.map((item) => item.productId);
         const products = yield prisma_1.default.product.findMany({
@@ -107,13 +165,15 @@ const createOrder = (req, res, next) => __awaiter(void 0, void 0, void 0, functi
                 throw new errorHandler_1.AppError(`Недостаточно товара "${product === null || product === void 0 ? void 0 : product.name}" на складе. Доступно: ${availableStock}`, 400);
             }
         }
-        // Создаем заказ в транзакции
+        // Создаем заказ в транзакции с увеличенным таймаутом
         const result = yield prisma_1.default.$transaction((tx) => __awaiter(void 0, void 0, void 0, function* () {
             // Создаем заказ
             const order = yield tx.order.create({
                 data: {
                     userId,
                     address: address.trim(),
+                    deliveryType,
+                    scheduledDate: deliveryType === 'SCHEDULED' ? scheduledDate : null,
                     items: {
                         create: items.map((item) => {
                             const product = products.find(p => p.id === item.productId);
@@ -142,21 +202,53 @@ const createOrder = (req, res, next) => __awaiter(void 0, void 0, void 0, functi
                     status: 'NEW'
                 }
             });
-            // Списываем товары со склада
-            for (const item of items) {
-                yield tx.stockMovement.create({
+            // Создаем записи для подтверждения магазинами и списываем товары параллельно
+            const [productsWithStores] = yield Promise.all([
+                tx.product.findMany({
+                    where: { id: { in: items.map((item) => item.productId) } },
+                    select: { id: true, storeId: true }
+                })
+            ]);
+            // Создаем подтверждения и движения склада параллельно
+            yield Promise.all([
+                // Создаем записи для подтверждения магазинами
+                ...order.items.map((orderItem) => __awaiter(void 0, void 0, void 0, function* () {
+                    const product = productsWithStores.find(p => p.id === orderItem.productId);
+                    if (product) {
+                        return tx.storeOrderConfirmation.create({
+                            data: {
+                                orderItemId: orderItem.id,
+                                storeId: product.storeId,
+                                status: 'PENDING'
+                            }
+                        });
+                    }
+                })),
+                // Списываем товары со склада
+                ...items.map((item) => tx.stockMovement.create({
                     data: {
                         productId: item.productId,
                         quantity: item.quantity,
                         type: 'OUTCOME',
                         adminId: userId // Записываем, кто сделал заказ
                     }
-                });
-            }
+                }))
+            ]);
             return order;
-        }));
+        }), {
+            timeout: 15000 // Увеличиваем таймаут до 15 секунд
+        });
         // Добавляем общую сумму заказа
         const orderWithTotal = Object.assign(Object.assign({}, result), { totalAmount: result.items.reduce((sum, item) => sum + (item.quantity * (item.price || 0)), 0), status: 'NEW' });
+        // Отправляем Telegram уведомления продавцам асинхронно
+        setImmediate(() => __awaiter(void 0, void 0, void 0, function* () {
+            try {
+                yield telegramService_1.telegramService.sendNewOrderNotifications(result.id);
+            }
+            catch (error) {
+                console.error('Ошибка отправки Telegram уведомлений:', error);
+            }
+        }));
         apiResponse_1.ApiResponseUtil.created(res, orderWithTotal, 'Заказ успешно создан');
     }
     catch (error) {
@@ -183,12 +275,12 @@ const getOrders = (req, res, next) => __awaiter(void 0, void 0, void 0, function
             where: whereClause,
             skip,
             take,
-            orderBy: { createdAt: 'desc' },
+            orderBy: { createdAt: 'desc' }, // Новые заказы первыми
             include: {
                 items: {
                     include: {
                         product: {
-                            select: { id: true, name: true, image: true }
+                            select: { id: true, name: true, price: true, image: true }
                         }
                     }
                 },
@@ -206,6 +298,8 @@ const getOrders = (req, res, next) => __awaiter(void 0, void 0, void 0, function
                 id: order.id,
                 address: order.address,
                 createdAt: order.createdAt,
+                deliveryType: order.deliveryType,
+                scheduledDate: order.scheduledDate,
                 items: order.items,
                 totalAmount: order.items.reduce((sum, item) => sum + (item.quantity * (item.price || 0)), 0),
                 status: ((_a = order.statuses[0]) === null || _a === void 0 ? void 0 : _a.status) || null,
@@ -246,7 +340,22 @@ const getOrder = (req, res, next) => __awaiter(void 0, void 0, void 0, function*
                     include: {
                         product: {
                             select: { id: true, name: true, price: true, image: true }
-                        }
+                        },
+                        storeConfirmation: isAdmin ? {
+                            select: {
+                                id: true,
+                                status: true,
+                                confirmedQuantity: true,
+                                confirmedAt: true,
+                                notes: true,
+                                store: {
+                                    select: { id: true, name: true }
+                                },
+                                confirmedBy: {
+                                    select: { id: true, name: true }
+                                }
+                            }
+                        } : undefined
                     }
                 },
                 user: isAdmin ? {
@@ -266,7 +375,39 @@ const getOrder = (req, res, next) => __awaiter(void 0, void 0, void 0, function*
         if (!order) {
             throw new errorHandler_1.AppError('Заказ не найден', 404);
         }
-        const orderWithDetails = Object.assign(Object.assign({}, order), { totalAmount: order.items.reduce((sum, item) => sum + (item.quantity * (item.price || 0)), 0), currentStatus: ((_a = order.statuses[order.statuses.length - 1]) === null || _a === void 0 ? void 0 : _a.status) || null, itemsCount: order.items.length });
+        // Добавляем информацию о подтверждениях для админов
+        let confirmationStats;
+        if (isAdmin && order.items) {
+            confirmationStats = {
+                pending: 0,
+                confirmed: 0,
+                partial: 0,
+                rejected: 0,
+                total: order.items.length
+            };
+            order.items.forEach((item) => {
+                if (item.storeConfirmation) {
+                    switch (item.storeConfirmation.status) {
+                        case 'PENDING':
+                            confirmationStats.pending++;
+                            break;
+                        case 'CONFIRMED':
+                            confirmationStats.confirmed++;
+                            break;
+                        case 'PARTIAL':
+                            confirmationStats.partial++;
+                            break;
+                        case 'REJECTED':
+                            confirmationStats.rejected++;
+                            break;
+                    }
+                }
+                else {
+                    confirmationStats.pending++;
+                }
+            });
+        }
+        const orderWithDetails = Object.assign(Object.assign(Object.assign({}, order), { deliveryType: order.deliveryType, scheduledDate: order.scheduledDate, totalAmount: order.items.reduce((sum, item) => sum + (item.quantity * (item.price || 0)), 0), currentStatus: ((_a = order.statuses[order.statuses.length - 1]) === null || _a === void 0 ? void 0 : _a.status) || null, itemsCount: order.items.length }), (isAdmin && confirmationStats ? { confirmationStats } : {}));
         apiResponse_1.ApiResponseUtil.success(res, orderWithDetails);
     }
     catch (error) {

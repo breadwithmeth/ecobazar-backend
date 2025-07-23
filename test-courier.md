@@ -61,11 +61,12 @@ curl -X GET http://localhost:4000/api/courier/1/stats \
 
 ## Workflow заказа с курьером
 
-1. **PENDING** → Заказ создан покупателем
-2. **CONFIRMED** → Админ подтвердил заказ
-3. **PROCESSING** → Заказ собирается
-4. **SHIPPED** → Админ назначил курьера (автоматически меняется статус)
+1. **NEW** → Новый заказ создан покупателем
+2. **WAITING_PAYMENT** → Заказ ожидает оплаты
+3. **PREPARING** → Заказ подготавливается
+4. **DELIVERING** → Админ назначил курьера (автоматически меняется статус)
 5. **DELIVERED** → Курьер отметил заказ как доставленный
+6. **CANCELLED** → Заказ отменен
 
 ## Примеры данных
 
@@ -75,7 +76,7 @@ curl -X GET http://localhost:4000/api/courier/1/stats \
   "id": 1,
   "totalPrice": 599.97,
   "address": "ул. Примерная, 123, кв. 45",
-  "status": "SHIPPED",
+  "status": "DELIVERING",
   "user": {
     "phone": "+1234567890"
   },

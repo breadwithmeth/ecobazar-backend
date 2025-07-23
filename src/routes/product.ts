@@ -10,7 +10,6 @@ import {
 import { updateProductPrice } from '../controllers/productPriceController';
 import { authenticate, isAdmin } from '../middlewares/auth';
 import { validateBody, validateParams, schemas } from '../middlewares/validation';
-import { adminRateLimit } from '../middlewares/security';
 
 const router = Router();
 
@@ -25,7 +24,6 @@ router.get('/:id', validateParams(schemas.id), getProduct);
 
 // Создать товар (только для администраторов)
 router.post('/', 
-  adminRateLimit,
   authenticate, 
   isAdmin, 
   validateBody(schemas.createProduct), 
@@ -34,7 +32,6 @@ router.post('/',
 
 // Обновить товар (только для администраторов)
 router.put('/:id', 
-  adminRateLimit,
   authenticate, 
   isAdmin, 
   validateParams(schemas.id),
@@ -50,7 +47,6 @@ router.put('/:id',
 
 // Удалить товар (только для администраторов)
 router.delete('/:id', 
-  adminRateLimit,
   authenticate, 
   isAdmin, 
   validateParams(schemas.id),
@@ -59,7 +55,6 @@ router.delete('/:id',
 
 // Изменить цену товара (только для администраторов)
 router.patch('/:id/price', 
-  adminRateLimit,
   authenticate, 
   isAdmin, 
   validateParams(schemas.id),

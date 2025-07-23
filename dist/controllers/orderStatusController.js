@@ -16,7 +16,7 @@ const updateOrderStatus = (req, res) => __awaiter(void 0, void 0, void 0, functi
     const { status } = req.body;
     if (!req.user || req.user.role !== 'ADMIN')
         return res.status(403).json({ message: 'Требуется роль администратора' });
-    const allowed = ['NEW', 'WAITING_PAYMENT', 'ASSEMBLY', 'SHIPPING', 'DELIVERED'];
+    const allowed = ['NEW', 'WAITING_PAYMENT', 'PREPARING', 'DELIVERING', 'DELIVERED', 'CANCELLED'];
     if (!allowed.includes(status)) {
         return res.status(400).json({ error: 'Некорректный статус' });
     }

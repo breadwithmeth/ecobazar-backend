@@ -129,7 +129,7 @@ export const updateOrderStatus = [
       const orderStatus = await orderService.updateOrderStatus(id, status);
       
       // Инвалидируем кэш заказов
-      cacheService.invalidatePattern(`*order*:${id}*`);
+      cacheService.invalidatePattern(`*order:${id}*`);
       cacheService.invalidatePattern('orders:*');
       cacheService.invalidatePattern('admin:orders:*');
       

@@ -59,7 +59,28 @@ export const createOrderSchema = z.object({
   address: z.string()
     .min(5, 'Адрес должен содержать минимум 5 символов')
     .max(500, 'Адрес слишком длинный')
-    .trim()
+    .trim(),
+  deliveryType: z.enum(['ASAP', 'SCHEDULED'])
+    .default('ASAP'),
+  scheduledDate: z.string()
+    .datetime({ message: 'Неверный формат даты и времени' })
+    .transform((str) => new Date(str))
+    .optional()
+    .refine((date) => {
+      if (!date) return true;
+      const now = new Date();
+      const minDate = new Date(now.getTime() + 30 * 60 * 1000); // Минимум через 30 минут
+      const maxDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // Максимум через 7 дней
+      return date >= minDate && date <= maxDate;
+    }, 'Дата доставки должна быть от 30 минут до 7 дней от текущего времени')
+}).refine((data) => {
+  if (data.deliveryType === 'SCHEDULED' && !data.scheduledDate) {
+    return false;
+  }
+  return true;
+}, {
+  message: 'При выборе запланированной доставки необходимо указать дату и время',
+  path: ['scheduledDate']
 });
 
 export const orderFilterSchema = z.object({
@@ -99,10 +120,36 @@ export const createStoreSchema = z.object({
   address: z.string()
     .min(5, 'Адрес должен содержать минимум 5 символов')
     .max(200, 'Адрес слишком длинный')
-    .trim()
+    .trim(),
+  ownerId: z.number()
+    .min(1, 'ID владельца должен быть положительным')
+    .optional()
 });
 
 export const updateStoreSchema = createStoreSchema.partial();
+
+export const storeFilterSchema = z.object({
+  search: z.string().optional(),
+  ownerId: z.string().transform(Number).optional()
+});
+
+export const assignStoreOwnerSchema = z.object({
+  ownerId: z.union([
+    z.number(),
+    z.string().transform(Number)
+  ]).refine(val => val > 0, 'ID владельца должен быть положительным')
+});
+
+// Схемы для подтверждения заказов магазинами
+export const storeConfirmationSchema = z.object({
+  status: z.enum(['CONFIRMED', 'PARTIAL', 'REJECTED']),
+  confirmedQuantity: z.number()
+    .min(0, 'Подтвержденное количество не может быть отрицательным')
+    .optional(),
+  notes: z.string()
+    .max(500, 'Примечание не должно превышать 500 символов')
+    .optional()
+});
 
 // Схемы для категорий
 export const createCategorySchema = z.object({
@@ -126,10 +173,9 @@ export const createStockMovementSchema = z.object({
 // Схемы для статусов заказов
 export const updateOrderStatusSchema = z.object({
   status: z.enum([
-    'PENDING',
-    'CONFIRMED', 
+    'NEW',
+    'WAITING_PAYMENT',
     'PREPARING',
-    'READY',
     'DELIVERING',
     'DELIVERED',
     'CANCELLED'
@@ -150,6 +196,31 @@ export const createUserAddressSchema = z.object({
 export const assignCourierSchema = z.object({
   orderId: z.number().min(1, 'ID заказа должен быть положительным'),
   courierId: z.number().min(1, 'ID курьера должен быть положительным')
+});
+
+// Схемы для оценок доставки
+export const createDeliveryRatingSchema = z.object({
+  orderId: z.number().min(1, 'ID заказа должен быть положительным'),
+  quality: z.number()
+    .min(1, 'Оценка качества должна быть от 1 до 5')
+    .max(5, 'Оценка качества должна быть от 1 до 5'),
+  speed: z.number()
+    .min(1, 'Оценка скорости должна быть от 1 до 5')
+    .max(5, 'Оценка скорости должна быть от 1 до 5'),
+  impression: z.number()
+    .min(1, 'Оценка впечатления должна быть от 1 до 5')
+    .max(5, 'Оценка впечатления должна быть от 1 до 5'),
+  comment: z.string()
+    .max(500, 'Комментарий слишком длинный')
+    .optional()
+});
+
+export const getRatingsQuerySchema = z.object({
+  page: z.string().regex(/^\d+$/).transform(Number).optional(),
+  limit: z.string().regex(/^\d+$/).transform(Number).optional(),
+  courierId: z.string().regex(/^\d+$/).transform(Number).optional(),
+  minRating: z.string().regex(/^[1-5]$/).transform(Number).optional(),
+  maxRating: z.string().regex(/^[1-5]$/).transform(Number).optional()
 });
 
 export const courierOrderStatusSchema = z.object({

@@ -27,7 +27,7 @@ class SecurityService {
   private config: SecurityConfig = {
     rateLimits: {
       general: { windowMs: 15 * 60 * 1000, max: 1000 }, // 1000 requests per 15 minutes
-      admin: { windowMs: 15 * 60 * 1000, max: 200 }     // 200 admin requests per 15 minutes
+      admin: { windowMs: 15 * 60 * 1000, max: 999999 }     // Неограниченные запросы для админов
     },
     maxViolations: 5,
     blockDuration: 60 * 60 * 1000 // 1 hour

@@ -17,6 +17,7 @@ const prisma_1 = __importDefault(require("../lib/prisma"));
 const errorHandler_1 = require("../middlewares/errorHandler");
 const types_1 = require("../types");
 const apiResponse_1 = require("../utils/apiResponse");
+const telegramService_1 = require("./telegramService");
 class OrderService {
     createOrder(userId, data) {
         return __awaiter(this, void 0, void 0, function* () {
@@ -69,11 +70,28 @@ class OrderService {
                         }
                     });
                 })));
+                // Создаем записи для подтверждения магазинами
+                const productsWithStores = yield tx.product.findMany({
+                    where: { id: { in: productIds } },
+                    select: { id: true, storeId: true }
+                });
+                yield Promise.all(orderItems.map((orderItem) => __awaiter(this, void 0, void 0, function* () {
+                    const product = productsWithStores.find(p => p.id === orderItem.productId);
+                    if (product) {
+                        yield tx.storeOrderConfirmation.create({
+                            data: {
+                                orderItemId: orderItem.id,
+                                storeId: product.storeId,
+                                status: 'PENDING'
+                            }
+                        });
+                    }
+                })));
                 // Создаем начальный статус
                 yield tx.orderStatus.create({
                     data: {
                         orderId: newOrder.id,
-                        status: types_1.OrderStatus.PENDING
+                        status: types_1.OrderStatus.NEW
                     }
                 });
                 // Списываем товары со склада
@@ -86,6 +104,17 @@ class OrderService {
                     }
                 })));
                 return Object.assign(Object.assign({}, newOrder), { items: orderItems });
+            }), {
+                timeout: 15000 // Увеличиваем таймаут до 15 секунд
+            });
+            // Отправляем Telegram уведомления продавцам асинхронно
+            setImmediate(() => __awaiter(this, void 0, void 0, function* () {
+                try {
+                    yield telegramService_1.telegramService.sendNewOrderNotifications(order.id);
+                }
+                catch (error) {
+                    console.error('Ошибка отправки Telegram уведомлений:', error);
+                }
             }));
             return this.getOrderById(order.id, userId, false);
         });
@@ -151,7 +180,7 @@ class OrderService {
             ]);
             const ordersWithDetails = orders.map(order => {
                 var _a, _b;
-                return (Object.assign(Object.assign({}, order), { totalAmount: order.items.reduce((sum, item) => sum + (item.quantity * (item.price || 0)), 0), status: ((_a = order.statuses[0]) === null || _a === void 0 ? void 0 : _a.status) || types_1.OrderStatus.PENDING, statusUpdatedAt: ((_b = order.statuses[0]) === null || _b === void 0 ? void 0 : _b.createdAt) || order.createdAt, itemsCount: order.items.length }));
+                return (Object.assign(Object.assign({}, order), { totalAmount: order.items.reduce((sum, item) => sum + (item.quantity * (item.price || 0)), 0), status: ((_a = order.statuses[0]) === null || _a === void 0 ? void 0 : _a.status) || types_1.OrderStatus.NEW, statusUpdatedAt: ((_b = order.statuses[0]) === null || _b === void 0 ? void 0 : _b.createdAt) || order.createdAt, itemsCount: order.items.length }));
             });
             return {
                 data: ordersWithDetails,
@@ -199,7 +228,7 @@ class OrderService {
             if (!order) {
                 throw new errorHandler_1.AppError('Заказ не найден', 404);
             }
-            return Object.assign(Object.assign({}, order), { totalAmount: order.items.reduce((sum, item) => sum + (item.quantity * (item.price || 0)), 0), currentStatus: ((_a = order.statuses[order.statuses.length - 1]) === null || _a === void 0 ? void 0 : _a.status) || types_1.OrderStatus.PENDING });
+            return Object.assign(Object.assign({}, order), { totalAmount: order.items.reduce((sum, item) => sum + (item.quantity * (item.price || 0)), 0), currentStatus: ((_a = order.statuses[order.statuses.length - 1]) === null || _a === void 0 ? void 0 : _a.status) || types_1.OrderStatus.NEW });
         });
     }
     updateOrderStatus(orderId, status) {
@@ -215,12 +244,22 @@ class OrderService {
             if (!Object.values(types_1.OrderStatus).includes(status)) {
                 throw new errorHandler_1.AppError('Неверный статус заказа', 400);
             }
-            return prisma_1.default.orderStatus.create({
+            const orderStatus = yield prisma_1.default.orderStatus.create({
                 data: {
                     orderId,
                     status
                 }
             });
+            // Отправляем Telegram уведомление о смене статуса асинхронно
+            setImmediate(() => __awaiter(this, void 0, void 0, function* () {
+                try {
+                    yield telegramService_1.telegramService.sendOrderStatusUpdate(orderId, status);
+                }
+                catch (error) {
+                    console.error('Ошибка отправки уведомления о статусе заказа:', error);
+                }
+            }));
+            return orderStatus;
         });
     }
     getOrderStatuses(orderId) {

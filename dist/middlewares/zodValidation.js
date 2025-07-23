@@ -10,7 +10,9 @@ const validateBody = (schema) => {
                 const errors = result.error.issues.map((err) => `${err.path.join('.')}: ${err.message}`);
                 throw new errorHandler_1.AppError(`Ошибки валидации тела запроса: ${errors.join(', ')}`, 400);
             }
+            // Сохраняем в оба места для совместимости
             req.body = result.data;
+            req.validatedBody = result.data;
             next();
         }
         catch (error) {

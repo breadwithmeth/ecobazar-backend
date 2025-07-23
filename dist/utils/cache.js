@@ -74,7 +74,15 @@ class CacheService {
     }
     // Инвалидация по паттерну
     invalidatePattern(pattern) {
-        const regex = new RegExp(pattern);
+        // Преобразуем glob-паттерн в регулярное выражение
+        const globToRegex = (glob) => {
+            // Экранируем специальные символы регулярных выражений, кроме *
+            const escaped = glob.replace(/[.+?^${}()|[\]\\]/g, '\\$&');
+            // Заменяем * на .*
+            return escaped.replace(/\*/g, '.*');
+        };
+        const regexPattern = globToRegex(pattern);
+        const regex = new RegExp(`^${regexPattern}$`);
         for (const key of this.cache.keys()) {
             if (regex.test(key)) {
                 this.cache.delete(key);

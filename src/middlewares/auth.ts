@@ -105,6 +105,23 @@ export const isCourier = (req: AuthRequest, res: Response, next: NextFunction) =
   }
 };
 
+export const isSeller = (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    if (!req.user) {
+      throw new AppError('Пользователь не авторизован', 401);
+    }
+    
+    if (req.user.role !== 'SELLER') {
+      securityLogger.logUnauthorizedAccess(req, 'Seller endpoint');
+      throw new AppError('Требуется роль продавца', 403);
+    }
+    
+    next();
+  } catch (error) {
+    next(error);
+  }
+};
+
 export const isAdminOrCourier = (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     if (!req.user) {

@@ -84,7 +84,7 @@ export const getProducts = async (req: Request, res: Response, next: NextFunctio
       if (maxPrice) filters.price.lte = maxPrice;
     }
     
-    const orderBy = PaginationUtil.buildOrderBy(sortBy || 'id', sortOrder || 'asc');
+    const orderBy = { id: 'desc' } as any;
 
     // Получаем общее количество товаров
     const total = await prisma.product.count({ where: filters });

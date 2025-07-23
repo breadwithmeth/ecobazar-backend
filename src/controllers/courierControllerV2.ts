@@ -5,6 +5,7 @@ import { AppError } from '../middlewares/errorHandler';
 import { ApiResponseUtil } from '../utils/apiResponse';
 import { cacheService, CacheService } from '../utils/cache';
 import { OrderService } from '../services/orderService';
+import { telegramService } from '../services/telegramService';
 import { 
   paginationSchema,
   idSchema,
@@ -259,6 +260,15 @@ export const assignCourierToOrder = [
       cacheService.invalidatePattern(`courier:${courierId}:*`);
       cacheService.invalidatePattern(`*order*:${orderId}*`);
       cacheService.invalidatePattern('admin:orders:*');
+      
+      // Отправляем уведомление курьеру асинхронно
+      setImmediate(async () => {
+        try {
+          await telegramService.sendCourierAssignmentNotification(orderId, courierId);
+        } catch (error) {
+          console.error('Ошибка отправки уведомления курьеру:', error);
+        }
+      });
       
       logger.info(`Админ ${req.user!.id} назначил курьера ${courierId} на заказ ${orderId}`);
       

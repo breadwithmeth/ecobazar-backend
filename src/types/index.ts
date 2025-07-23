@@ -89,6 +89,13 @@ export interface UpdateUserRequest {
 export interface CreateStoreRequest {
   name: string;
   address: string;
+  ownerId?: number;
+}
+
+export interface UpdateStoreRequest extends Partial<CreateStoreRequest> {}
+
+export interface StoreFilter extends FilterOptions {
+  ownerId?: number;
 }
 
 // Типы для категорий
@@ -110,10 +117,9 @@ export interface AuthResponse {
 
 // Енумы
 export enum OrderStatus {
-  PENDING = 'PENDING',
-  CONFIRMED = 'CONFIRMED',
+  NEW = 'NEW',
+  WAITING_PAYMENT = 'WAITING_PAYMENT',
   PREPARING = 'PREPARING',
-  READY = 'READY',
   DELIVERING = 'DELIVERING',
   DELIVERED = 'DELIVERED',
   CANCELLED = 'CANCELLED'
@@ -122,7 +128,8 @@ export enum OrderStatus {
 export enum UserRole {
   ADMIN = 'ADMIN',
   CUSTOMER = 'CUSTOMER',
-  COURIER = 'COURIER'
+  COURIER = 'COURIER',
+  SELLER = 'SELLER'
 }
 
 export enum StockMovementType {

@@ -5,7 +5,6 @@ const productController_1 = require("../controllers/productController");
 const productPriceController_1 = require("../controllers/productPriceController");
 const auth_1 = require("../middlewares/auth");
 const validation_1 = require("../middlewares/validation");
-const security_1 = require("../middlewares/security");
 const router = (0, express_1.Router)();
 // Получить все товары с пагинацией (публичный доступ)
 router.get('/', productController_1.getProducts);
@@ -14,9 +13,9 @@ router.get('/all', productController_1.getAllProducts);
 // Получить товар по ID (публичный доступ)
 router.get('/:id', (0, validation_1.validateParams)(validation_1.schemas.id), productController_1.getProduct);
 // Создать товар (только для администраторов)
-router.post('/', security_1.adminRateLimit, auth_1.authenticate, auth_1.isAdmin, (0, validation_1.validateBody)(validation_1.schemas.createProduct), productController_1.createProduct);
+router.post('/', auth_1.authenticate, auth_1.isAdmin, (0, validation_1.validateBody)(validation_1.schemas.createProduct), productController_1.createProduct);
 // Обновить товар (только для администраторов)
-router.put('/:id', security_1.adminRateLimit, auth_1.authenticate, auth_1.isAdmin, (0, validation_1.validateParams)(validation_1.schemas.id), (0, validation_1.validateBody)({
+router.put('/:id', auth_1.authenticate, auth_1.isAdmin, (0, validation_1.validateParams)(validation_1.schemas.id), (0, validation_1.validateBody)({
     name: { type: 'string', minLength: 1, maxLength: 200 },
     price: { type: 'number', min: 0 },
     storeId: { type: 'number', min: 1 },
@@ -24,9 +23,9 @@ router.put('/:id', security_1.adminRateLimit, auth_1.authenticate, auth_1.isAdmi
     categoryId: { type: 'number', min: 1 }
 }), productController_1.updateProduct);
 // Удалить товар (только для администраторов)
-router.delete('/:id', security_1.adminRateLimit, auth_1.authenticate, auth_1.isAdmin, (0, validation_1.validateParams)(validation_1.schemas.id), productController_1.deleteProduct);
+router.delete('/:id', auth_1.authenticate, auth_1.isAdmin, (0, validation_1.validateParams)(validation_1.schemas.id), productController_1.deleteProduct);
 // Изменить цену товара (только для администраторов)
-router.patch('/:id/price', security_1.adminRateLimit, auth_1.authenticate, auth_1.isAdmin, (0, validation_1.validateParams)(validation_1.schemas.id), (0, validation_1.validateBody)({
+router.patch('/:id/price', auth_1.authenticate, auth_1.isAdmin, (0, validation_1.validateParams)(validation_1.schemas.id), (0, validation_1.validateBody)({
     price: { required: true, type: 'number', min: 0 }
 }), productPriceController_1.updateProductPrice);
 exports.default = router;

@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.validateSchema = exports.courierOrderStatusSchema = exports.assignCourierSchema = exports.createUserAddressSchema = exports.updateOrderStatusSchema = exports.createStockMovementSchema = exports.updateCategorySchema = exports.createCategorySchema = exports.updateStoreSchema = exports.createStoreSchema = exports.updateUserSchema = exports.createUserSchema = exports.orderFilterSchema = exports.createOrderSchema = exports.orderItemSchema = exports.productFilterSchema = exports.updateProductSchema = exports.createProductSchema = exports.paginationSchema = exports.idSchema = void 0;
+exports.validateSchema = exports.courierOrderStatusSchema = exports.assignCourierSchema = exports.createUserAddressSchema = exports.updateOrderStatusSchema = exports.createStockMovementSchema = exports.updateCategorySchema = exports.createCategorySchema = exports.storeConfirmationSchema = exports.assignStoreOwnerSchema = exports.storeFilterSchema = exports.updateStoreSchema = exports.createStoreSchema = exports.updateUserSchema = exports.createUserSchema = exports.orderFilterSchema = exports.createOrderSchema = exports.orderItemSchema = exports.productFilterSchema = exports.updateProductSchema = exports.createProductSchema = exports.paginationSchema = exports.idSchema = void 0;
 const zod_1 = require("zod");
 // Базовые схемы
 exports.idSchema = zod_1.z.object({
@@ -55,7 +55,29 @@ exports.createOrderSchema = zod_1.z.object({
     address: zod_1.z.string()
         .min(5, 'Адрес должен содержать минимум 5 символов')
         .max(500, 'Адрес слишком длинный')
-        .trim()
+        .trim(),
+    deliveryType: zod_1.z.enum(['ASAP', 'SCHEDULED'])
+        .default('ASAP'),
+    scheduledDate: zod_1.z.string()
+        .datetime({ message: 'Неверный формат даты и времени' })
+        .transform((str) => new Date(str))
+        .optional()
+        .refine((date) => {
+        if (!date)
+            return true;
+        const now = new Date();
+        const minDate = new Date(now.getTime() + 30 * 60 * 1000); // Минимум через 30 минут
+        const maxDate = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000); // Максимум через 7 дней
+        return date >= minDate && date <= maxDate;
+    }, 'Дата доставки должна быть от 30 минут до 7 дней от текущего времени')
+}).refine((data) => {
+    if (data.deliveryType === 'SCHEDULED' && !data.scheduledDate) {
+        return false;
+    }
+    return true;
+}, {
+    message: 'При выборе запланированной доставки необходимо указать дату и время',
+    path: ['scheduledDate']
 });
 exports.orderFilterSchema = zod_1.z.object({
     status: zod_1.z.string().optional(),
@@ -91,9 +113,32 @@ exports.createStoreSchema = zod_1.z.object({
     address: zod_1.z.string()
         .min(5, 'Адрес должен содержать минимум 5 символов')
         .max(200, 'Адрес слишком длинный')
-        .trim()
+        .trim(),
+    ownerId: zod_1.z.number()
+        .min(1, 'ID владельца должен быть положительным')
+        .optional()
 });
 exports.updateStoreSchema = exports.createStoreSchema.partial();
+exports.storeFilterSchema = zod_1.z.object({
+    search: zod_1.z.string().optional(),
+    ownerId: zod_1.z.string().transform(Number).optional()
+});
+exports.assignStoreOwnerSchema = zod_1.z.object({
+    ownerId: zod_1.z.union([
+        zod_1.z.number(),
+        zod_1.z.string().transform(Number)
+    ]).refine(val => val > 0, 'ID владельца должен быть положительным')
+});
+// Схемы для подтверждения заказов магазинами
+exports.storeConfirmationSchema = zod_1.z.object({
+    status: zod_1.z.enum(['CONFIRMED', 'PARTIAL', 'REJECTED']),
+    confirmedQuantity: zod_1.z.number()
+        .min(0, 'Подтвержденное количество не может быть отрицательным')
+        .optional(),
+    notes: zod_1.z.string()
+        .max(500, 'Примечание не должно превышать 500 символов')
+        .optional()
+});
 // Схемы для категорий
 exports.createCategorySchema = zod_1.z.object({
     name: zod_1.z.string()
@@ -113,10 +158,9 @@ exports.createStockMovementSchema = zod_1.z.object({
 // Схемы для статусов заказов
 exports.updateOrderStatusSchema = zod_1.z.object({
     status: zod_1.z.enum([
-        'PENDING',
-        'CONFIRMED',
+        'NEW',
+        'WAITING_PAYMENT',
         'PREPARING',
-        'READY',
         'DELIVERING',
         'DELIVERED',
         'CANCELLED'

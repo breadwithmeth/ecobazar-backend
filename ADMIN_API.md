@@ -146,7 +146,7 @@
         "userId": 1,
         "totalPrice": 599.97,
         "address": "ул. Примерная, 123",
-        "status": "PENDING",
+        "status": "NEW",
         "user": {
           "id": 1,
           "telegram_user_id": "123456789",
@@ -198,15 +198,14 @@
 **Тело запроса:**
 ```json
 {
-  "status": "CONFIRMED"
+  "status": "PREPARING"
 }
 ```
 
 **Доступные статусы:**
-- `PENDING` - В ожидании
-- `CONFIRMED` - Подтвержден
-- `PREPARING` - Готовится
-- `READY` - Готов к выдаче
+- `NEW` - Новый заказ
+- `WAITING_PAYMENT` - Ожидание оплаты
+- `PREPARING` - Подготовка заказа
 - `DELIVERING` - Доставляется
 - `DELIVERED` - Доставлен
 - `CANCELLED` - Отменен
@@ -217,7 +216,7 @@
   "success": true,
   "data": {
     "id": 1,
-    "status": "CONFIRMED",
+    "status": "PREPARING",
     "updatedAt": "2025-01-21T10:30:00.000Z"
   },
   "message": "Статус заказа обновлен"
@@ -830,7 +829,7 @@ curl -X POST https://eco-b-6sgyz.ondigitalocean.app/api/categories \
 curl -X PUT https://eco-b-6sgyz.ondigitalocean.app/api/orders/123/status \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer ADMIN_TOKEN" \
-  -d '{"status": "CONFIRMED"}'
+  -d '{"status": "PREPARING"}'
 
 # Получение статистики безопасности
 curl -X GET https://eco-b-6sgyz.ondigitalocean.app/security-stats \

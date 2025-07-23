@@ -18,6 +18,7 @@ const errorHandler_1 = require("../middlewares/errorHandler");
 const apiResponse_1 = require("../utils/apiResponse");
 const cache_1 = require("../utils/cache");
 const orderService_1 = require("../services/orderService");
+const telegramService_1 = require("../services/telegramService");
 const schemas_1 = require("../validators/schemas");
 const zodValidation_1 = require("../middlewares/zodValidation");
 const logger_1 = require("../utils/logger");
@@ -229,6 +230,15 @@ exports.assignCourierToOrder = [
             cache_1.cacheService.invalidatePattern(`courier:${courierId}:*`);
             cache_1.cacheService.invalidatePattern(`*order*:${orderId}*`);
             cache_1.cacheService.invalidatePattern('admin:orders:*');
+            // Отправляем уведомление курьеру асинхронно
+            setImmediate(() => __awaiter(void 0, void 0, void 0, function* () {
+                try {
+                    yield telegramService_1.telegramService.sendCourierAssignmentNotification(orderId, courierId);
+                }
+                catch (error) {
+                    console.error('Ошибка отправки уведомления курьеру:', error);
+                }
+            }));
             logger_1.logger.info(`Админ ${req.user.id} назначил курьера ${courierId} на заказ ${orderId}`);
             apiResponse_1.ApiResponseUtil.success(res, Object.assign(Object.assign({}, result), { totalAmount: result.items.reduce((sum, item) => sum + (item.price || 0) * item.quantity, 0), currentStatus: ((_a = result.statuses[0]) === null || _a === void 0 ? void 0 : _a.status) || 'DELIVERING' }), 'Курьер успешно назначен на заказ');
         }
