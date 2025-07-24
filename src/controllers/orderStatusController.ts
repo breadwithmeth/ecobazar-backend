@@ -20,6 +20,14 @@ export const updateOrderStatus = async (req: AuthRequest, res: Response) => {
   // Добавляем запись в историю статусов
   await prisma.orderStatus.create({ data: { orderId: Number(id), status } });
   
+  // Отправляем уведомление клиенту о смене статуса
+  try {
+    console.log(`📢 Отправляем уведомление о смене статуса заказа #${id} на ${status}`);
+    await telegramService.sendOrderStatusNotification(Number(id), status);
+  } catch (error) {
+    console.error('Ошибка отправки уведомления о статусе:', error);
+  }
+  
   // Если статус изменился на DELIVERED, отправляем запрос на оценку
   if (status === 'DELIVERED') {
     try {

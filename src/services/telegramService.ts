@@ -1368,6 +1368,117 @@ export class TelegramNotificationService {
       }
     }
   }
+
+  // Отправка уведомления клиенту о смене статуса заказа
+  async sendOrderStatusNotification(orderId: number, status: string): Promise<void> {
+    try {
+      if (!this.bot) {
+        console.error('❌ Telegram bot не инициализирован');
+        return;
+      }
+
+      console.log(`📢 Отправляем уведомление о смене статуса заказа #${orderId} на ${status}`);
+
+      const order = await prisma.order.findUnique({
+        where: { id: orderId },
+        include: {
+          user: {
+            select: { telegram_user_id: true, name: true }
+          },
+          items: {
+            include: {
+              product: {
+                select: { name: true }
+              }
+            }
+          },
+          courier: {
+            select: { name: true }
+          }
+        }
+      });
+
+      if (!order) {
+        console.error(`❌ Заказ #${orderId} не найден для отправки уведомления`);
+        return;
+      }
+
+      if (!order.user.telegram_user_id) {
+        console.log(`ℹ️ У пользователя заказа #${orderId} нет Telegram ID`);
+        return;
+      }
+
+      const statusMessages = {
+        'NEW': '🆕 Новый заказ',
+        'WAITING_PAYMENT': '💳 Ожидает оплаты',
+        'PREPARING': '👨‍🍳 Готовится',
+        'DELIVERING': '🚚 В пути',
+        'DELIVERED': '✅ Доставлен',
+        'CANCELLED': '❌ Отменен'
+      };
+
+      const statusEmoji = {
+        'NEW': '🆕',
+        'WAITING_PAYMENT': '💳',
+        'PREPARING': '👨‍🍳',
+        'DELIVERING': '🚚',
+        'DELIVERED': '✅',
+        'CANCELLED': '❌'
+      };
+
+      const statusText = statusMessages[status as keyof typeof statusMessages] || status;
+      const emoji = statusEmoji[status as keyof typeof statusEmoji] || '📋';
+
+      let message = `${emoji} *Статус заказа #${orderId} изменен*\n\n`;
+      message += `📊 *Новый статус:* ${statusText}\n`;
+      
+      // Информация о товарах
+      if (order.items.length > 0) {
+        message += `\n🛒 *Товары:*\n`;
+        order.items.forEach(item => {
+          message += `• ${item.product.name} x${item.quantity}\n`;
+        });
+      }
+
+      // Общая сумма
+      const totalAmount = order.items.reduce((sum, item) => sum + (item.quantity * (item.price || 0)), 0);
+      message += `\n💰 *Сумма заказа:* ${totalAmount} ₸`;
+
+      // Дополнительная информация в зависимости от статуса
+      if (status === 'DELIVERING' && order.courier) {
+        message += `\n\n🚚 *Курьер:* ${order.courier.name}`;
+        message += `\n📍 *Адрес доставки:* ${order.address}`;
+        
+        if (order.deliveryType === 'SCHEDULED' && order.scheduledDate) {
+          const deliveryTime = new Date(order.scheduledDate).toLocaleString('ru-RU', {
+            timeZone: 'Asia/Almaty',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+          });
+          message += `\n⏰ *Время доставки:* ${deliveryTime}`;
+        } else {
+          message += `\n⚡ *Тип доставки:* Как можно скорее`;
+        }
+      } else if (status === 'DELIVERED') {
+        message += `\n\n🎉 Спасибо за заказ! Приятного аппетита!`;
+      } else if (status === 'CANCELLED') {
+        message += `\n\n😔 Приносим извинения за неудобства`;
+      } else if (status === 'PREPARING') {
+        message += `\n\n⏱️ Ваш заказ готовится. Ожидайте уведомления о доставке`;
+      }
+
+      await this.bot.sendMessage(order.user.telegram_user_id, message, {
+        parse_mode: 'Markdown'
+      });
+
+      console.log(`📱 Уведомление о статусе отправлено клиенту для заказа #${orderId}`);
+    } catch (error) {
+      console.error('Ошибка отправки уведомления о статусе:', error);
+    }
+  }
 }
 
 export const telegramService = new TelegramNotificationService();
