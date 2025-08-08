@@ -50,13 +50,10 @@ app.use(helmet({
 // Сжатие ответов
 app.use(compression());
 
-// CORS настройки
+// CORS настройки - разрешаем запросы откуда угодно
 app.use(cors({
-  origin: process.env.ALLOWED_ORIGINS?.split(',') || [
-    'http://localhost:3000',
-    'https://eco-f-ifjiw.ondigitalocean.app'
-  ],
-  credentials: true,
+  origin: '*', // Разрешаем запросы с любого домена
+  credentials: false, // Отключаем credentials при origin: '*'
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
   maxAge: 86400 // 24 часа
