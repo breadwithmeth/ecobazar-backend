@@ -60,6 +60,32 @@ class TelegramNotificationService {
                     const courierId = parseInt(status);
                     yield this.handleCourierDelivery(orderId, courierId, query);
                 }
+                else if (action === 'rate_delivery') {
+                    const orderId = parseInt(confirmationId);
+                    yield this.handleRatingStart(query, orderId);
+                }
+                else if (action === 'quality_rating') {
+                    const orderId = parseInt(confirmationId);
+                    const quality = parseInt(status);
+                    const chatId = query.from.id.toString();
+                    yield this.sendSpeedRating(chatId, orderId, quality);
+                }
+                else if (action === 'speed_rating') {
+                    const orderId = parseInt(confirmationId);
+                    const quality = parseInt(status);
+                    const speed = parseInt(quantity || '0');
+                    const chatId = query.from.id.toString();
+                    yield this.sendImpressionRating(chatId, orderId, quality, speed);
+                }
+                else if (action === 'impression_rating') {
+                    const [, orderIdStr, qualityStr, speedStr, impressionStr] = query.data.split(':');
+                    const orderId = parseInt(orderIdStr);
+                    const quality = parseInt(qualityStr);
+                    const speed = parseInt(speedStr);
+                    const impression = parseInt(impressionStr);
+                    const chatId = query.from.id.toString();
+                    yield this.finalizeRating(chatId, orderId, quality, speed, impression);
+                }
             }
             catch (error) {
                 console.error('Ошибка обработки callback query:', error);
@@ -963,6 +989,8 @@ class TelegramNotificationService {
                         parse_mode: 'Markdown'
                     });
                 }
+                // Отправляем запрос на оценку клиенту
+                yield this.sendRatingRequest(orderId);
                 // Отправляем уведомление покупателю о доставке
                 yield this.sendOrderStatusUpdate(orderId, 'DELIVERED');
             }
@@ -974,6 +1002,356 @@ class TelegramNotificationService {
                         show_alert: true
                     });
                 }
+            }
+        });
+    }
+    // Отправка запроса на оценку доставки клиенту
+    sendRatingRequest(orderId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            try {
+                if (!this.bot) {
+                    console.error('❌ Telegram bot не инициализирован');
+                    return;
+                }
+                console.log(`📊 Отправляем запрос на оценку доставки для заказа #${orderId}`);
+                const order = yield prisma_1.default.order.findUnique({
+                    where: { id: orderId },
+                    include: {
+                        user: {
+                            select: { telegram_user_id: true, name: true }
+                        },
+                        courier: {
+                            select: { name: true }
+                        },
+                        items: {
+                            include: {
+                                product: {
+                                    select: { name: true }
+                                }
+                            }
+                        },
+                        deliveryRating: true
+                    }
+                });
+                if (!order) {
+                    console.error(`❌ Заказ #${orderId} не найден для отправки запроса на оценку`);
+                    return;
+                }
+                if (order.deliveryRating) {
+                    console.log(`ℹ️ Оценка для заказа #${orderId} уже поставлена`);
+                    return;
+                }
+                if (!order.user.telegram_user_id) {
+                    console.log(`ℹ️ У пользователя заказа #${orderId} нет Telegram ID`);
+                    return;
+                }
+                const courierName = ((_a = order.courier) === null || _a === void 0 ? void 0 : _a.name) || 'Курьер';
+                const totalAmount = order.items.reduce((sum, item) => sum + (item.quantity * (item.price || 0)), 0);
+                let message = `🎉 *Ваш заказ #${orderId} доставлен!*\n\n`;
+                message += `👤 *Курьер:* ${courierName}\n`;
+                message += `💰 *Сумма заказа:* ${totalAmount} ₸\n\n`;
+                message += `📊 *Пожалуйста, оцените качество доставки:*\n`;
+                message += `• Качество товаров\n`;
+                message += `• Скорость доставки\n`;
+                message += `• Общее впечатление\n\n`;
+                message += `Ваше мнение поможет нам улучшить сервис! ⭐`;
+                const keyboard = [
+                    [
+                        {
+                            text: '⭐ Оценить доставку',
+                            callback_data: `rate_delivery:${orderId}`
+                        }
+                    ]
+                ];
+                yield this.bot.sendMessage(order.user.telegram_user_id, message, {
+                    parse_mode: 'Markdown',
+                    reply_markup: {
+                        inline_keyboard: keyboard
+                    }
+                });
+                console.log(`📱 Запрос на оценку доставки отправлен клиенту для заказа #${orderId}`);
+            }
+            catch (error) {
+                console.error('Ошибка отправки запроса на оценку:', error);
+            }
+        });
+    }
+    // Обработка начала процесса оценки
+    handleRatingStart(query, orderId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                if (!this.bot) {
+                    console.error('❌ Telegram bot не инициализирован');
+                    return;
+                }
+                const userId = query.from.id.toString();
+                // Проверяем права доступа к заказу
+                const order = yield prisma_1.default.order.findUnique({
+                    where: { id: orderId },
+                    include: {
+                        user: { select: { telegram_user_id: true } },
+                        deliveryRating: true
+                    }
+                });
+                if (!order) {
+                    yield this.bot.answerCallbackQuery(query.id, {
+                        text: 'Заказ не найден',
+                        show_alert: true
+                    });
+                    return;
+                }
+                if (order.user.telegram_user_id !== userId) {
+                    yield this.bot.answerCallbackQuery(query.id, {
+                        text: 'Вы можете оценить только свои заказы',
+                        show_alert: true
+                    });
+                    return;
+                }
+                if (order.deliveryRating) {
+                    yield this.bot.answerCallbackQuery(query.id, {
+                        text: 'Вы уже оценили этот заказ',
+                        show_alert: true
+                    });
+                    return;
+                }
+                yield this.bot.answerCallbackQuery(query.id, {
+                    text: 'Начинаем оценку доставки...'
+                });
+                // Отправляем первый вопрос - качество
+                yield this.sendQualityRating(userId, orderId);
+            }
+            catch (error) {
+                console.error('Ошибка начала оценки:', error);
+                if (this.bot) {
+                    yield this.bot.answerCallbackQuery(query.id, {
+                        text: 'Произошла ошибка',
+                        show_alert: true
+                    });
+                }
+            }
+        });
+    }
+    // Отправка оценки качества
+    sendQualityRating(chatId, orderId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (!this.bot) {
+                console.error('❌ Telegram bot не инициализирован');
+                return;
+            }
+            const message = `📦 *Оценка качества товаров*\n\nОцените качество полученных товаров от 1 до 5:`;
+            const keyboard = [];
+            for (let i = 1; i <= 5; i++) {
+                keyboard.push([{
+                        text: `${i} ${'⭐'.repeat(i)}`,
+                        callback_data: `quality_rating:${orderId}:${i}`
+                    }]);
+            }
+            yield this.bot.sendMessage(chatId, message, {
+                parse_mode: 'Markdown',
+                reply_markup: {
+                    inline_keyboard: keyboard
+                }
+            });
+        });
+    }
+    // Отправка оценки скорости
+    sendSpeedRating(chatId, orderId, quality) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (!this.bot) {
+                console.error('❌ Telegram bot не инициализирован');
+                return;
+            }
+            const message = `🚀 *Оценка скорости доставки*\n\nОцените скорость доставки от 1 до 5:`;
+            const keyboard = [];
+            for (let i = 1; i <= 5; i++) {
+                keyboard.push([{
+                        text: `${i} ${'⭐'.repeat(i)}`,
+                        callback_data: `speed_rating:${orderId}:${quality}:${i}`
+                    }]);
+            }
+            yield this.bot.sendMessage(chatId, message, {
+                parse_mode: 'Markdown',
+                reply_markup: {
+                    inline_keyboard: keyboard
+                }
+            });
+        });
+    }
+    // Отправка общей оценки впечатления
+    sendImpressionRating(chatId, orderId, quality, speed) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (!this.bot) {
+                console.error('❌ Telegram bot не инициализирован');
+                return;
+            }
+            const message = `💝 *Общее впечатление*\n\nОцените ваше общее впечатление от доставки от 1 до 5:`;
+            const keyboard = [];
+            for (let i = 1; i <= 5; i++) {
+                keyboard.push([{
+                        text: `${i} ${'⭐'.repeat(i)}`,
+                        callback_data: `impression_rating:${orderId}:${quality}:${speed}:${i}`
+                    }]);
+            }
+            yield this.bot.sendMessage(chatId, message, {
+                parse_mode: 'Markdown',
+                reply_markup: {
+                    inline_keyboard: keyboard
+                }
+            });
+        });
+    }
+    // Финализация оценки
+    finalizeRating(chatId, orderId, quality, speed, impression) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                if (!this.bot) {
+                    console.error('❌ Telegram bot не инициализирован');
+                    return;
+                }
+                // Получаем информацию о заказе для создания оценки
+                const order = yield prisma_1.default.order.findUnique({
+                    where: { id: orderId },
+                    include: {
+                        user: { select: { id: true } }
+                    }
+                });
+                if (!order) {
+                    yield this.bot.sendMessage(chatId, '❌ Заказ не найден.');
+                    return;
+                }
+                // Создаем оценку в базе данных
+                yield prisma_1.default.deliveryRating.create({
+                    data: {
+                        orderId,
+                        userId: order.user.id,
+                        courierId: order.courierId,
+                        quality,
+                        speed,
+                        impression
+                    }
+                });
+                const avgRating = ((quality + speed + impression) / 3).toFixed(1);
+                let message = `🎉 *Спасибо за оценку!*\n\n`;
+                message += `📊 *Ваши оценки:*\n`;
+                message += `📦 Качество: ${quality} ${'⭐'.repeat(quality)}\n`;
+                message += `🚀 Скорость: ${speed} ${'⭐'.repeat(speed)}\n`;
+                message += `💝 Впечатление: ${impression} ${'⭐'.repeat(impression)}\n\n`;
+                message += `⭐ *Средняя оценка: ${avgRating}/5*\n\n`;
+                message += `Ваше мнение поможет нам стать лучше! 💙`;
+                yield this.bot.sendMessage(chatId, message, {
+                    parse_mode: 'Markdown'
+                });
+                console.log(`✅ Оценка доставки сохранена для заказа #${orderId}: качество ${quality}, скорость ${speed}, впечатление ${impression}`);
+            }
+            catch (error) {
+                console.error('Ошибка сохранения оценки:', error);
+                if (this.bot) {
+                    yield this.bot.sendMessage(chatId, '❌ Произошла ошибка при сохранении оценки.');
+                }
+            }
+        });
+    }
+    // Отправка уведомления клиенту о смене статуса заказа
+    sendOrderStatusNotification(orderId, status) {
+        return __awaiter(this, void 0, void 0, function* () {
+            try {
+                if (!this.bot) {
+                    console.error('❌ Telegram bot не инициализирован');
+                    return;
+                }
+                console.log(`📢 Отправляем уведомление о смене статуса заказа #${orderId} на ${status}`);
+                const order = yield prisma_1.default.order.findUnique({
+                    where: { id: orderId },
+                    include: {
+                        user: {
+                            select: { telegram_user_id: true, name: true }
+                        },
+                        items: {
+                            include: {
+                                product: {
+                                    select: { name: true }
+                                }
+                            }
+                        },
+                        courier: {
+                            select: { name: true }
+                        }
+                    }
+                });
+                if (!order) {
+                    console.error(`❌ Заказ #${orderId} не найден для отправки уведомления`);
+                    return;
+                }
+                if (!order.user.telegram_user_id) {
+                    console.log(`ℹ️ У пользователя заказа #${orderId} нет Telegram ID`);
+                    return;
+                }
+                const statusMessages = {
+                    'NEW': '🆕 Новый заказ',
+                    'WAITING_PAYMENT': '💳 Ожидает оплаты',
+                    'PREPARING': '👨‍🍳 Готовится',
+                    'DELIVERING': '🚚 В пути',
+                    'DELIVERED': '✅ Доставлен',
+                    'CANCELLED': '❌ Отменен'
+                };
+                const statusEmoji = {
+                    'NEW': '🆕',
+                    'WAITING_PAYMENT': '💳',
+                    'PREPARING': '👨‍🍳',
+                    'DELIVERING': '🚚',
+                    'DELIVERED': '✅',
+                    'CANCELLED': '❌'
+                };
+                const statusText = statusMessages[status] || status;
+                const emoji = statusEmoji[status] || '📋';
+                let message = `${emoji} *Статус заказа #${orderId} изменен*\n\n`;
+                message += `📊 *Новый статус:* ${statusText}\n`;
+                // Информация о товарах
+                if (order.items.length > 0) {
+                    message += `\n🛒 *Товары:*\n`;
+                    order.items.forEach(item => {
+                        message += `• ${item.product.name} x${item.quantity}\n`;
+                    });
+                }
+                // Общая сумма
+                const totalAmount = order.items.reduce((sum, item) => sum + (item.quantity * (item.price || 0)), 0);
+                message += `\n💰 *Сумма заказа:* ${totalAmount} ₸`;
+                // Дополнительная информация в зависимости от статуса
+                if (status === 'DELIVERING' && order.courier) {
+                    message += `\n\n🚚 *Курьер:* ${order.courier.name}`;
+                    message += `\n📍 *Адрес доставки:* ${order.address}`;
+                    if (order.deliveryType === 'SCHEDULED' && order.scheduledDate) {
+                        const deliveryTime = new Date(order.scheduledDate).toLocaleString('ru-RU', {
+                            timeZone: 'Asia/Almaty',
+                            year: 'numeric',
+                            month: '2-digit',
+                            day: '2-digit',
+                            hour: '2-digit',
+                            minute: '2-digit'
+                        });
+                        message += `\n⏰ *Время доставки:* ${deliveryTime}`;
+                    }
+                    else {
+                        message += `\n⚡ *Тип доставки:* Как можно скорее`;
+                    }
+                }
+                else if (status === 'DELIVERED') {
+                    message += `\n\n🎉 Спасибо за заказ! Приятного аппетита!`;
+                }
+                else if (status === 'CANCELLED') {
+                    message += `\n\n😔 Приносим извинения за неудобства`;
+                }
+                else if (status === 'PREPARING') {
+                    message += `\n\n⏱️ Ваш заказ готовится. Ожидайте уведомления о доставке`;
+                }
+                yield this.bot.sendMessage(order.user.telegram_user_id, message, {
+                    parse_mode: 'Markdown'
+                });
+                console.log(`📱 Уведомление о статусе отправлено клиенту для заказа #${orderId}`);
+            }
+            catch (error) {
+                console.error('Ошибка отправки уведомления о статусе:', error);
             }
         });
     }

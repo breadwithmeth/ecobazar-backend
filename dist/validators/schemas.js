@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.validateSchema = exports.courierOrderStatusSchema = exports.assignCourierSchema = exports.createUserAddressSchema = exports.updateOrderStatusSchema = exports.createStockMovementSchema = exports.updateCategorySchema = exports.createCategorySchema = exports.storeConfirmationSchema = exports.assignStoreOwnerSchema = exports.storeFilterSchema = exports.updateStoreSchema = exports.createStoreSchema = exports.updateUserSchema = exports.createUserSchema = exports.orderFilterSchema = exports.createOrderSchema = exports.orderItemSchema = exports.productFilterSchema = exports.updateProductSchema = exports.createProductSchema = exports.paginationSchema = exports.idSchema = void 0;
+exports.validateSchema = exports.courierOrderStatusSchema = exports.getRatingsQuerySchema = exports.createDeliveryRatingSchema = exports.assignCourierSchema = exports.createUserAddressSchema = exports.updateOrderStatusSchema = exports.createStockMovementSchema = exports.updateCategorySchema = exports.createCategorySchema = exports.storeConfirmationSchema = exports.assignStoreOwnerSchema = exports.storeFilterSchema = exports.updateStoreSchema = exports.createStoreSchema = exports.updateUserSchema = exports.createUserSchema = exports.orderFilterSchema = exports.createOrderSchema = exports.orderItemSchema = exports.productFilterSchema = exports.updateProductSchema = exports.createProductSchema = exports.paginationSchema = exports.idSchema = void 0;
 const zod_1 = require("zod");
 // Базовые схемы
 exports.idSchema = zod_1.z.object({
@@ -179,6 +179,29 @@ exports.createUserAddressSchema = zod_1.z.object({
 exports.assignCourierSchema = zod_1.z.object({
     orderId: zod_1.z.number().min(1, 'ID заказа должен быть положительным'),
     courierId: zod_1.z.number().min(1, 'ID курьера должен быть положительным')
+});
+// Схемы для оценок доставки
+exports.createDeliveryRatingSchema = zod_1.z.object({
+    orderId: zod_1.z.number().min(1, 'ID заказа должен быть положительным'),
+    quality: zod_1.z.number()
+        .min(1, 'Оценка качества должна быть от 1 до 5')
+        .max(5, 'Оценка качества должна быть от 1 до 5'),
+    speed: zod_1.z.number()
+        .min(1, 'Оценка скорости должна быть от 1 до 5')
+        .max(5, 'Оценка скорости должна быть от 1 до 5'),
+    impression: zod_1.z.number()
+        .min(1, 'Оценка впечатления должна быть от 1 до 5')
+        .max(5, 'Оценка впечатления должна быть от 1 до 5'),
+    comment: zod_1.z.string()
+        .max(500, 'Комментарий слишком длинный')
+        .optional()
+});
+exports.getRatingsQuerySchema = zod_1.z.object({
+    page: zod_1.z.string().regex(/^\d+$/).transform(Number).optional(),
+    limit: zod_1.z.string().regex(/^\d+$/).transform(Number).optional(),
+    courierId: zod_1.z.string().regex(/^\d+$/).transform(Number).optional(),
+    minRating: zod_1.z.string().regex(/^[1-5]$/).transform(Number).optional(),
+    maxRating: zod_1.z.string().regex(/^[1-5]$/).transform(Number).optional()
 });
 exports.courierOrderStatusSchema = zod_1.z.object({
     status: zod_1.z.literal('DELIVERED', {

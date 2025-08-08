@@ -165,6 +165,62 @@ curl -X GET https://eco-b-6sgyz.ondigitalocean.app/api/stores/my/store \
 
 ---
 
+### PUT /api/stores/my/store
+Обновить информацию о своем магазине.
+
+**Авторизация:** Требуется роль SELLER
+
+**Тело запроса:**
+```json
+{
+  "name": "ЭкоМагазин Центр Обновленный",
+  "address": "ул. Главная, 125"
+}
+```
+
+**Параметры:**
+- `name` (string): Новое название магазина (опционально, 1-100 символов)
+- `address` (string): Новый адрес магазина (опционально, 5-200 символов)
+
+**Пример запроса:**
+```bash
+curl -X PUT https://eco-b-6sgyz.ondigitalocean.app/api/stores/my/store \
+  -H "Content-Type: application/json" \
+  -H "Authorization: Bearer YOUR_SELLER_TOKEN" \
+  -d '{
+    "name": "ЭкоМагазин Центр Обновленный",
+    "address": "ул. Главная, 125"
+  }'
+```
+
+**Ответ (200):**
+```json
+{
+  "success": true,
+  "data": {
+    "id": 1,
+    "name": "ЭкоМагазин Центр Обновленный",
+    "address": "ул. Главная, 125",
+    "ownerId": 2,
+    "owner": {
+      "id": 2,
+      "name": "Мария Петрова",
+      "telegram_user_id": "seller123",
+      "phone_number": "+7900123456",
+      "role": "SELLER"
+    }
+  },
+  "message": "Ваш магазин успешно обновлен"
+}
+```
+
+**Ошибки:**
+- `403` - Требуется роль продавца
+- `404` - У вас нет назначенного магазина
+- `400` - Ошибки валидации данных
+
+---
+
 ### GET /api/stores/my/orders
 Получить заказы для своего магазина.
 
@@ -726,6 +782,19 @@ class StoreAPI {
     return response.json();
   }
 
+  // Обновить свой магазин
+  async updateMyStore(storeData) {
+    const response = await fetch(`${this.baseURL}/my/store`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${this.token}`
+      },
+      body: JSON.stringify(storeData)
+    });
+    return response.json();
+  }
+
   // Получить элементы заказов для подтверждения
   async getOrderItems(page = 1, limit = 10, status = null) {
     const params = new URLSearchParams({ 
@@ -773,6 +842,15 @@ class StoreAPI {
 
 // Использование:
 const store = new StoreAPI('your_seller_token');
+
+// Получить информацию о своем магазине
+const myStore = await store.getMyStore();
+
+// Обновить информацию о магазине
+const updatedStore = await store.updateMyStore({
+  name: 'Новое название магазина',
+  address: 'Новый адрес магазина'
+});
 
 // Получить ожидающие подтверждения товары
 const pendingItems = await store.getPendingItems();

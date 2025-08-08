@@ -6,6 +6,7 @@ import {
   getMyStore,
   createStore as createStoreV2,
   updateStore,
+  updateMyStore,
   assignStoreOwner,
   deleteStore,
   getStoreOrders,
@@ -23,6 +24,7 @@ router.get('/:id', getStore);
 
 // Роуты для SELLER
 router.get('/my/store', authenticate, isSeller, getMyStore);
+router.put('/my/store', authenticate, isSeller, updateMyStore);
 router.get('/my/orders', authenticate, isSeller, getStoreOrders);
 router.get('/my/order-items', authenticate, isSeller, getStoreOrderItems);
 router.put('/my/order-items/:orderItemId/confirm', authenticate, isSeller, confirmOrderItem);

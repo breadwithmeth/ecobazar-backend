@@ -20,7 +20,7 @@ var __rest = (this && this.__rest) || function (s, e) {
     return t;
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getStoreStats = exports.confirmOrderItem = exports.getStoreOrderItems = exports.getStoreOrders = exports.deleteStore = exports.assignStoreOwner = exports.updateStore = exports.createStore = exports.getMyStore = exports.getStore = exports.getStores = void 0;
+exports.getStoreStats = exports.confirmOrderItem = exports.getStoreOrderItems = exports.getStoreOrders = exports.deleteStore = exports.assignStoreOwner = exports.updateMyStore = exports.updateStore = exports.createStore = exports.getMyStore = exports.getStore = exports.getStores = void 0;
 const apiResponse_1 = require("../utils/apiResponse");
 const errorHandler_1 = require("../middlewares/errorHandler");
 const storeService_1 = require("../services/storeService");
@@ -100,6 +100,26 @@ exports.updateStore = [
             const isAdmin = req.user.role === 'ADMIN';
             const store = yield storeService.updateStore(id, updateData, userId, isAdmin);
             apiResponse_1.ApiResponseUtil.success(res, store, 'Магазин успешно обновлен');
+        }
+        catch (error) {
+            next(error);
+        }
+    })
+];
+// Обновить свой магазин (только для SELLER)
+exports.updateMyStore = [
+    (0, zodValidation_1.validateBody)(schemas_1.updateStoreSchema),
+    (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
+        try {
+            const updateData = req.validatedBody;
+            const userId = req.user.id;
+            // Получаем магазин пользователя
+            const userStore = yield storeService.getStoreByOwner(userId);
+            if (!userStore) {
+                throw new errorHandler_1.AppError('У вас нет назначенного магазина', 404);
+            }
+            const store = yield storeService.updateStore(userStore.id, updateData, userId, false);
+            apiResponse_1.ApiResponseUtil.success(res, store, 'Ваш магазин успешно обновлен');
         }
         catch (error) {
             next(error);

@@ -9,6 +9,7 @@ router.get('/', storeControllerV2_1.getStores);
 router.get('/:id', storeControllerV2_1.getStore);
 // Роуты для SELLER
 router.get('/my/store', auth_1.authenticate, auth_1.isSeller, storeControllerV2_1.getMyStore);
+router.put('/my/store', auth_1.authenticate, auth_1.isSeller, storeControllerV2_1.updateMyStore);
 router.get('/my/orders', auth_1.authenticate, auth_1.isSeller, storeControllerV2_1.getStoreOrders);
 router.get('/my/order-items', auth_1.authenticate, auth_1.isSeller, storeControllerV2_1.getStoreOrderItems);
 router.put('/my/order-items/:orderItemId/confirm', auth_1.authenticate, auth_1.isSeller, storeControllerV2_1.confirmOrderItem);

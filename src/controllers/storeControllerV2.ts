@@ -106,6 +106,30 @@ export const updateStore = [
   }
 ];
 
+// Обновить свой магазин (только для SELLER)
+export const updateMyStore = [
+  validateBody(updateStoreSchema),
+  async (req: AuthRequest, res: Response, next: NextFunction) => {
+    try {
+      const updateData = (req as any).validatedBody;
+      const userId = req.user!.id;
+      
+      // Получаем магазин пользователя
+      const userStore = await storeService.getStoreByOwner(userId);
+      
+      if (!userStore) {
+        throw new AppError('У вас нет назначенного магазина', 404);
+      }
+      
+      const store = await storeService.updateStore(userStore.id, updateData, userId, false);
+      
+      ApiResponseUtil.success(res, store, 'Ваш магазин успешно обновлен');
+    } catch (error) {
+      next(error);
+    }
+  }
+];
+
 // Назначить владельца магазина (только для ADMIN)
 export const assignStoreOwner = [
   validateParams(idSchema),

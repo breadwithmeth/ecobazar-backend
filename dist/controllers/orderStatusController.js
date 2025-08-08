@@ -10,6 +10,9 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.addOrderStatus = exports.getOrderStatuses = exports.updateOrderStatus = void 0;
+const client_1 = require("@prisma/client");
+const telegramService_1 = require("../services/telegramService");
+const prisma = new client_1.PrismaClient();
 // Изменить статус заказа (PUT /api/orders/:id/status)
 const updateOrderStatus = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { id } = req.params;
@@ -23,13 +26,29 @@ const updateOrderStatus = (req, res) => __awaiter(void 0, void 0, void 0, functi
     const order = yield prisma.order.findUnique({ where: { id: Number(id) } });
     if (!order)
         return res.status(404).json({ error: 'Заказ не найден' });
-    // Только добавляем запись в историю статусов
+    // Добавляем запись в историю статусов
     yield prisma.orderStatus.create({ data: { orderId: Number(id), status } });
+    // Отправляем уведомление клиенту о смене статуса
+    try {
+        console.log(`📢 Отправляем уведомление о смене статуса заказа #${id} на ${status}`);
+        yield telegramService_1.telegramService.sendOrderStatusNotification(Number(id), status);
+    }
+    catch (error) {
+        console.error('Ошибка отправки уведомления о статусе:', error);
+    }
+    // Если статус изменился на DELIVERED, отправляем запрос на оценку
+    if (status === 'DELIVERED') {
+        try {
+            console.log(`📊 Заказ #${id} доставлен, отправляем запрос на оценку доставки`);
+            yield telegramService_1.telegramService.sendRatingRequest(Number(id));
+        }
+        catch (error) {
+            console.error('Ошибка отправки запроса на оценку:', error);
+        }
+    }
     res.json({ success: true });
 });
 exports.updateOrderStatus = updateOrderStatus;
-const client_1 = require("@prisma/client");
-const prisma = new client_1.PrismaClient();
 // Получить историю статусов заказа
 const getOrderStatuses = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     const { orderId } = req.params;

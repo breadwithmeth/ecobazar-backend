@@ -90,7 +90,7 @@ const getProducts = (req, res, next) => __awaiter(void 0, void 0, void 0, functi
             if (maxPrice)
                 filters.price.lte = maxPrice;
         }
-        const orderBy = apiResponse_1.PaginationUtil.buildOrderBy(sortBy || 'id', sortOrder || 'asc');
+        const orderBy = { id: 'desc' };
         // Получаем общее количество товаров
         const total = yield prisma_1.default.product.count({ where: filters });
         // Получаем товары с пагинацией
