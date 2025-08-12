@@ -158,7 +158,8 @@ export const schemas = {
     price: { required: true, type: 'number' as const, min: 0 },
     storeId: { required: true, type: 'number' as const, min: 1 },
     image: { type: 'string' as const, maxLength: 500 },
-    categoryId: { type: 'number' as const, min: 1 }
+    categoryId: { type: 'number' as const, min: 1 },
+    unit: { type: 'string' as const, minLength: 1, maxLength: 20 } // добавлено
   },
   
   createOrder: {

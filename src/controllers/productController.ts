@@ -6,7 +6,7 @@ import { AuthRequest } from '../middlewares/auth';
 
 export const createProduct = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { name, price, storeId, image, categoryId } = req.body;
+    const { name, price, storeId, image, categoryId, unit } = req.body;
     
     // Проверяем существование магазина
     const store = await prisma.store.findUnique({
@@ -36,6 +36,7 @@ export const createProduct = async (req: AuthRequest, res: Response, next: NextF
     
     if (image) data.image = image.trim();
     if (categoryId) data.categoryId = parseInt(categoryId);
+    if (unit) data.unit = unit.trim();
     
     const product = await prisma.product.create({ 
       data,
@@ -270,7 +271,7 @@ export const updateProduct = async (req: AuthRequest, res: Response, next: NextF
       throw new AppError('Неверный ID товара', 400);
     }
     
-    const { name, price, storeId, image, categoryId } = req.body;
+    const { name, price, storeId, image, categoryId, unit } = req.body;
     
     // Проверяем существование товара
     const existingProduct = await prisma.product.findUnique({
@@ -309,6 +310,7 @@ export const updateProduct = async (req: AuthRequest, res: Response, next: NextF
     if (storeId !== undefined) updateData.storeId = parseInt(storeId);
     if (image !== undefined) updateData.image = image ? image.trim() : null;
     if (categoryId !== undefined) updateData.categoryId = categoryId ? parseInt(categoryId) : null;
+    if (unit !== undefined) updateData.unit = unit ? unit.trim() : null;
     
     const updatedProduct = await prisma.product.update({
       where: { id: productId },

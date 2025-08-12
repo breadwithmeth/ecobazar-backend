@@ -40,7 +40,8 @@ router.put('/:id',
     price: { type: 'number' as const, min: 0 },
     storeId: { type: 'number' as const, min: 1 },
     image: { type: 'string' as const, maxLength: 500 },
-    categoryId: { type: 'number' as const, min: 1 }
+    categoryId: { type: 'number' as const, min: 1 },
+    unit: { type: 'string' as const, minLength: 1, maxLength: 20 } // добавлено
   }),
   updateProduct
 );

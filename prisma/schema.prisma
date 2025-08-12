@@ -74,6 +74,7 @@ model Product {
   categoryId Int?
   stockMovements StockMovement[]
   orderItems OrderItem[]
+  unit    String? // единица измерения (например: kg, pcs, l)
 }
 
 model StockMovement {
