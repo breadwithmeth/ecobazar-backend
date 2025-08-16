@@ -68,6 +68,7 @@ model Product {
   name    String
   price   Float
   image   String?
+  isVisible Boolean @default(true) // видимость товара
   store   Store    @relation(fields: [storeId], references: [id])
   storeId Int
   category   Category? @relation(fields: [categoryId], references: [id])

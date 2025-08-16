@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { createOrder, getOrders, getAllOrders, getOrder } from '../controllers/orderController';
+import { createOrder, getOrders, getAllOrders, getOrder, getOrdersReport } from '../controllers/orderController';
 import { updateOrderStatus } from '../controllers/orderStatusController';
 import { authenticate, isAdmin } from '../middlewares/auth';
 import { validateBody, validateParams, schemas } from '../middlewares/validation';
@@ -46,6 +46,13 @@ router.put('/:id/status',
     }
   }),
   updateOrderStatus
+);
+
+// Отчет по заказам (только для администраторов)
+router.get('/admin/report', 
+  authenticate, 
+  isAdmin,
+  getOrdersReport
 );
 
 export default router;

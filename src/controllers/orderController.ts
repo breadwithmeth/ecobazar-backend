@@ -448,4 +448,144 @@ export const getOrder = async (req: AuthRequest, res: Response, next: NextFuncti
   } catch (error) {
     next(error);
   }
+
+  
+};
+
+export const getOrdersReport = async (req: AuthRequest, res: Response, next: NextFunction) => {
+  try {
+    // Парсинг и валидация query
+    const allowedStatuses = ['NEW', 'WAITING_PAYMENT', 'PREPARING', 'DELIVERING', 'DELIVERED', 'CANCELLED'];
+    const now = new Date();
+    const defaultFrom = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); // 30 дней назад
+    const fromStr = (req.query.from as string) || defaultFrom.toISOString();
+    const toStr = (req.query.to as string) || now.toISOString();
+
+    const from = new Date(fromStr);
+    const to = new Date(toStr);
+    if (isNaN(from.getTime()) || isNaN(to.getTime())) {
+      throw new AppError('Неверный формат from/to. Используйте ISO дату.', 400);
+    }
+
+    const storeId = req.query.storeId ? parseInt(req.query.storeId as string) : undefined;
+    const courierId = req.query.courierId ? parseInt(req.query.courierId as string) : undefined;
+    const status = req.query.status as string | undefined;
+    const deliveryType = req.query.deliveryType as 'ASAP' | 'SCHEDULED' | undefined;
+    const groupBy = ((req.query.groupBy as string) || 'day').toLowerCase(); // day | month
+
+    if (status && !allowedStatuses.includes(status)) {
+      throw new AppError(`Недопустимый статус. Разрешены: ${allowedStatuses.join(', ')}`, 400);
+    }
+    if (storeId !== undefined && (isNaN(storeId) || storeId <= 0)) {
+      throw new AppError('storeId должен быть положительным числом', 400);
+    }
+    if (courierId !== undefined && (isNaN(courierId) || courierId <= 0)) {
+      throw new AppError('courierId должен быть положительным числом', 400);
+    }
+    if (deliveryType && !['ASAP', 'SCHEDULED'].includes(deliveryType)) {
+      throw new AppError('deliveryType должен быть ASAP или SCHEDULED', 400);
+    }
+
+    // Where
+    const where: any = {
+      createdAt: { gte: from, lte: to }
+    };
+    if (storeId) {
+      where.items = { some: { product: { storeId } } };
+    }
+    if (courierId) where.courierId = courierId;
+    if (status) {
+      where.statuses = { some: { status } };
+    }
+    if (deliveryType) where.deliveryType = deliveryType;
+
+    const orders = await prisma.order.findMany({
+      where,
+      orderBy: { createdAt: 'asc' },
+      include: {
+        items: {
+          select: {
+            quantity: true,
+            price: true,
+            product: {
+              select: {
+                id: true,
+                name: true,
+                storeId: true,
+                store: { select: { id: true, name: true } }
+              }
+            }
+          }
+        },
+        courier: { select: { id: true, name: true } },
+        statuses: { orderBy: { createdAt: 'desc' }, take: 1, select: { status: true } }
+      }
+    });
+
+    // Агрегации
+    const totals = { orders: orders.length, revenue: 0, items: 0, aov: 0 };
+    const byStatus = new Map<string, number>();
+    const byStore = new Map<number, { storeId: number; storeName: string; orders: Set<number>; revenue: number; items: number }>();
+    const byCourier = new Map<string, { courierId: number | null; courierName: string; orders: number; revenue: number }>();
+    const daily = new Map<string, { date: string; orders: number; revenue: number }>();
+
+    for (const order of orders as any[]) {
+      const orderRevenue = order.items.reduce((sum: number, it: any) => sum + (it.quantity * (it.price || 0)), 0);
+      const orderItems = order.items.reduce((sum: number, it: any) => sum + it.quantity, 0);
+      totals.revenue += orderRevenue;
+      totals.items += orderItems;
+
+      // Статус (текущий)
+      const st = order.statuses[0]?.status || 'UNKNOWN';
+      byStatus.set(st, (byStatus.get(st) || 0) + 1);
+
+      // По дням/месяцам
+      const d = new Date(order.createdAt);
+      const key = groupBy === 'month'
+        ? `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+        : `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+      const dayEntry = daily.get(key) || { date: key, orders: 0, revenue: 0 };
+      dayEntry.orders += 1;
+      dayEntry.revenue += orderRevenue;
+      daily.set(key, dayEntry);
+
+      // По магазинам
+      const storesSeen = new Set<number>();
+      for (const it of order.items) {
+        const sId = it.product.storeId;
+        const name = it.product.store?.name || `Store ${sId}`;
+        const entry = byStore.get(sId) || { storeId: sId, storeName: name, orders: new Set<number>(), revenue: 0, items: 0 };
+        entry.revenue += (it.quantity * (it.price || 0));
+        entry.items += it.quantity;
+        if (!storesSeen.has(sId)) {
+          entry.orders.add(order.id);
+          storesSeen.add(sId);
+        }
+        byStore.set(sId, entry);
+      }
+
+      // По курьерам
+      const cKey = order.courier ? String(order.courier.id) : 'null';
+      const cEntry = byCourier.get(cKey) || { courierId: order.courier ? order.courier.id : null, courierName: order.courier?.name || 'Не назначен', orders: 0, revenue: 0 };
+      cEntry.orders += 1;
+      cEntry.revenue += orderRevenue;
+      byCourier.set(cKey, cEntry);
+    }
+
+    totals.aov = totals.orders > 0 ? Number((totals.revenue / totals.orders).toFixed(2)) : 0;
+
+    const response = {
+      range: { from: from.toISOString(), to: to.toISOString() },
+      filters: { storeId, courierId, status, deliveryType, groupBy },
+      totals,
+      byStatus: Array.from(byStatus.entries()).map(([status, count]) => ({ status, count })).sort((a, b) => b.count - a.count),
+      byStore: Array.from(byStore.values()).map(e => ({ storeId: e.storeId, storeName: e.storeName, orders: e.orders.size, revenue: Number(e.revenue.toFixed(2)), items: e.items })).sort((a, b) => b.revenue - a.revenue),
+      byCourier: Array.from(byCourier.values()).map(e => ({ courierId: e.courierId, courierName: e.courierName, orders: e.orders, revenue: Number(e.revenue.toFixed(2)) })).sort((a, b) => b.revenue - a.revenue),
+      daily: Array.from(daily.values()).sort((a, b) => a.date.localeCompare(b.date))
+    };
+
+    ApiResponseUtil.success(res, response);
+  } catch (error) {
+    next(error);
+  }
 };

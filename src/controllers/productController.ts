@@ -6,7 +6,7 @@ import { AuthRequest } from '../middlewares/auth';
 
 export const createProduct = async (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    const { name, price, storeId, image, categoryId, unit } = req.body;
+    const { name, price, storeId, image, categoryId, unit, isVisible } = req.body;
     
     // Проверяем существование магазина
     const store = await prisma.store.findUnique({
@@ -37,6 +37,7 @@ export const createProduct = async (req: AuthRequest, res: Response, next: NextF
     if (image) data.image = image.trim();
     if (categoryId) data.categoryId = parseInt(categoryId);
     if (unit) data.unit = unit.trim();
+    if (typeof isVisible === 'boolean') data.isVisible = isVisible;
     
     const product = await prisma.product.create({ 
       data,
@@ -63,6 +64,15 @@ export const getProducts = async (req: Request, res: Response, next: NextFunctio
     
     // Фильтрация
     const filters: any = {};
+    
+    // Показываем только видимые товары по умолчанию
+    if (req.query.isVisible === undefined) {
+      filters.isVisible = true;
+    } else {
+      const v = String(req.query.isVisible).toLowerCase();
+      if (v === 'true') filters.isVisible = true;
+      else if (v === 'false') filters.isVisible = false;
+    }
     
     // Фильтр по категории
     const categoryId = FilterUtil.buildNumberFilter(req.query.categoryId as string);
@@ -143,7 +153,16 @@ export const getAllProducts = async (req: Request, res: Response, next: NextFunc
   try {
     // Фильтрация (те же фильтры что и в getProducts, но без пагинации)
     const filters: any = {};
-    
+
+    // Показываем только видимые товары по умолчанию
+    if (req.query.isVisible === undefined) {
+      filters.isVisible = true;
+    } else {
+      const v = String(req.query.isVisible).toLowerCase();
+      if (v === 'true') filters.isVisible = true;
+      else if (v === 'false') filters.isVisible = false;
+    }
+
     // Фильтр по категории
     const categoryId = FilterUtil.buildNumberFilter(req.query.categoryId as string);
     if (categoryId) filters.categoryId = categoryId;
@@ -236,7 +255,7 @@ export const getProduct = async (req: Request, res: Response, next: NextFunction
       }
     });
     
-    if (!product) {
+    if (!product || product.isVisible === false) {
       throw new AppError('Товар не найден', 404);
     }
     
@@ -271,7 +290,7 @@ export const updateProduct = async (req: AuthRequest, res: Response, next: NextF
       throw new AppError('Неверный ID товара', 400);
     }
     
-    const { name, price, storeId, image, categoryId, unit } = req.body;
+    const { name, price, storeId, image, categoryId, unit, isVisible } = req.body;
     
     // Проверяем существование товара
     const existingProduct = await prisma.product.findUnique({
@@ -311,6 +330,7 @@ export const updateProduct = async (req: AuthRequest, res: Response, next: NextF
     if (image !== undefined) updateData.image = image ? image.trim() : null;
     if (categoryId !== undefined) updateData.categoryId = categoryId ? parseInt(categoryId) : null;
     if (unit !== undefined) updateData.unit = unit ? unit.trim() : null;
+    if (isVisible !== undefined) updateData.isVisible = !!isVisible;
     
     const updatedProduct = await prisma.product.update({
       where: { id: productId },

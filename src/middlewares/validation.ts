@@ -159,7 +159,8 @@ export const schemas = {
     storeId: { required: true, type: 'number' as const, min: 1 },
     image: { type: 'string' as const, maxLength: 500 },
     categoryId: { type: 'number' as const, min: 1 },
-    unit: { type: 'string' as const, minLength: 1, maxLength: 20 } // добавлено
+    unit: { type: 'string' as const, minLength: 1, maxLength: 20 },
+    isVisible: { type: 'boolean' as const }
   },
   
   createOrder: {
