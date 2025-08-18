@@ -30,22 +30,27 @@ for (const envVar of requiredEnvVars) {
 
 const app = express();
 
+// Переключатель Helmet через .env (ENABLE_HELMET=false чтобы отключить)
+const ENABLE_HELMET = (process.env.ENABLE_HELMET ?? 'true').toLowerCase() !== 'false';
+
 // Базовые middleware для безопасности
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      scriptSrc: ["'self'"],
-      imgSrc: ["'self'", "data:", "https:"],
+if (ENABLE_HELMET) {
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'"],
+        imgSrc: ["'self'", "data:", "https:"],
+      },
     },
-  },
-  hsts: {
-    maxAge: 31536000,
-    includeSubDomains: true,
-    preload: true
-  }
-}));
+    hsts: {
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: true
+    }
+  }));
+}
 
 // Сжатие ответов
 app.use(compression());

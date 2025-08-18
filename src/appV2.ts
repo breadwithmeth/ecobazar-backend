@@ -28,38 +28,27 @@ for (const envVar of requiredEnvVars) {
 
 const app = express();
 
-// Обработка неперехваченных исключений
-process.on('uncaughtException', (error) => {
-  logger.error('Uncaught Exception', { 
-    error: error.message, 
-    stack: error.stack 
-  });
-  process.exit(1);
-});
-
-process.on('unhandledRejection', (reason, promise) => {
-  logger.error('Unhandled Rejection', { 
-    reason: reason as string, 
-    promise: promise.toString() 
-  });
-});
+// Переключатель Helmet через .env (ENABLE_HELMET=false чтобы отключить)
+const ENABLE_HELMET = (process.env.ENABLE_HELMET ?? 'true').toLowerCase() !== 'false';
 
 // Базовые middleware для безопасности
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      scriptSrc: ["'self'"],
-      imgSrc: ["'self'", "data:", "https:"],
+if (ENABLE_HELMET) {
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        scriptSrc: ["'self'"],
+        imgSrc: ["'self'", "data:", "https:"],
+      },
     },
-  },
-  hsts: {
-    maxAge: 31536000,
-    includeSubDomains: true,
-    preload: true
-  }
-}));
+    hsts: {
+      maxAge: 31536000,
+      includeSubDomains: true,
+      preload: true
+    }
+  }));
+}
 
 // Сжатие ответов
 app.use(compression({

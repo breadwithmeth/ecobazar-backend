@@ -2,6 +2,7 @@
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
+var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const dotenv_1 = __importDefault(require("dotenv"));
@@ -24,22 +25,26 @@ for (const envVar of requiredEnvVars) {
     }
 }
 const app = (0, express_1.default)();
+// Переключатель Helmet через .env (ENABLE_HELMET=false чтобы отключить)
+const ENABLE_HELMET = ((_a = process.env.ENABLE_HELMET) !== null && _a !== void 0 ? _a : 'true').toLowerCase() !== 'false';
 // Базовые middleware для безопасности
-app.use((0, helmet_1.default)({
-    contentSecurityPolicy: {
-        directives: {
-            defaultSrc: ["'self'"],
-            styleSrc: ["'self'", "'unsafe-inline'"],
-            scriptSrc: ["'self'"],
-            imgSrc: ["'self'", "data:", "https:"],
+if (ENABLE_HELMET) {
+    app.use((0, helmet_1.default)({
+        contentSecurityPolicy: {
+            directives: {
+                defaultSrc: ["'self'"],
+                styleSrc: ["'self'", "'unsafe-inline'"],
+                scriptSrc: ["'self'"],
+                imgSrc: ["'self'", "data:", "https:"],
+            },
         },
-    },
-    hsts: {
-        maxAge: 31536000,
-        includeSubDomains: true,
-        preload: true
-    }
-}));
+        hsts: {
+            maxAge: 31536000,
+            includeSubDomains: true,
+            preload: true
+        }
+    }));
+}
 // Сжатие ответов
 app.use((0, compression_1.default)());
 // CORS настройки по .env (ALLOWED_ORIGINS)
