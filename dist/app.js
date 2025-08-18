@@ -56,7 +56,13 @@ const corsOptions = {
     maxAge: 86400 // 24 часа
 };
 app.use((0, cors_1.default)(corsOptions));
-app.options('(.*)', (0, cors_1.default)(corsOptions));
+// Универсальная обработка preflight без route-паттернов (совместимо с Express 5)
+app.use((req, res, next) => {
+    if (req.method === 'OPTIONS') {
+        return res.sendStatus(204);
+    }
+    next();
+});
 // Middleware для парсинга тела запроса
 app.use((0, body_parser_1.json)({ limit: '10mb' }));
 app.use((0, body_parser_1.urlencoded)({ extended: true, limit: '10mb' }));
