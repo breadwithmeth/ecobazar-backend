@@ -69,13 +69,16 @@ app.use((0, compression_1.default)({
     }
 }));
 // CORS настройки - разрешаем запросы откуда угодно
-app.use((0, cors_1.default)({
-    origin: '*', // Разрешаем запросы с любого домена
-    credentials: false, // Отключаем credentials при origin: '*'
+const corsOptions = {
+    origin: '*',
+    credentials: false,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token'],
-    maxAge: 86400 // 24 часа
-}));
+    maxAge: 86400
+};
+app.use((0, cors_1.default)(corsOptions));
+// Явная обработка preflight-запросов
+app.options('*', (0, cors_1.default)(corsOptions));
 // Middleware для парсинга тела запроса
 app.use((0, body_parser_1.json)({
     limit: '10mb',
