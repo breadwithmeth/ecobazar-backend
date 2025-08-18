@@ -81,7 +81,7 @@ const allowedOriginsV2 = isWildcardOriginV2
   : allowedOriginsEnvV2.split(',').map(o => o.trim()).filter(Boolean);
 
 const corsOptionsV2: cors.CorsOptions = {
-  origin: ["https://eco-f.drawbridge.kz"], // '*' или массив строк
+  origin: ["*"], // '*' или массив строк
   credentials: isWildcardOriginV2 ? false : true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token'],
