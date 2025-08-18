@@ -49,8 +49,8 @@ const allowedOrigins = isWildcardOrigin
     ? '*'
     : allowedOriginsEnv.split(',').map(o => o.trim()).filter(Boolean);
 const corsOptions = {
-    origin: ["*"], // '*' или массив строк
-    credentials: isWildcardOrigin ? false : true,
+    origin: ["https://eco-f.drawbridge.kz"], // '*' или массив строк
+    credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
     maxAge: 86400 // 24 часа
