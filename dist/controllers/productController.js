@@ -18,7 +18,7 @@ const errorHandler_1 = require("../middlewares/errorHandler");
 const apiResponse_1 = require("../utils/apiResponse");
 const createProduct = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const { name, price, storeId, image, categoryId } = req.body;
+        const { name, price, storeId, image, categoryId, unit, isVisible } = req.body;
         // Проверяем существование магазина
         const store = yield prisma_1.default.store.findUnique({
             where: { id: storeId }
@@ -44,6 +44,10 @@ const createProduct = (req, res, next) => __awaiter(void 0, void 0, void 0, func
             data.image = image.trim();
         if (categoryId)
             data.categoryId = parseInt(categoryId);
+        if (unit)
+            data.unit = unit.trim();
+        if (typeof isVisible === 'boolean')
+            data.isVisible = isVisible;
         const product = yield prisma_1.default.product.create({
             data,
             include: {
@@ -68,6 +72,17 @@ const getProducts = (req, res, next) => __awaiter(void 0, void 0, void 0, functi
         const { skip, take } = apiResponse_1.PaginationUtil.getSkipTake(page, limit);
         // Фильтрация
         const filters = {};
+        // Показываем только видимые товары по умолчанию
+        if (req.query.isVisible === undefined) {
+            filters.isVisible = true;
+        }
+        else {
+            const v = String(req.query.isVisible).toLowerCase();
+            if (v === 'true')
+                filters.isVisible = true;
+            else if (v === 'false')
+                filters.isVisible = false;
+        }
         // Фильтр по категории
         const categoryId = apiResponse_1.FilterUtil.buildNumberFilter(req.query.categoryId);
         if (categoryId)
@@ -139,6 +154,17 @@ const getAllProducts = (req, res, next) => __awaiter(void 0, void 0, void 0, fun
     try {
         // Фильтрация (те же фильтры что и в getProducts, но без пагинации)
         const filters = {};
+        // Показываем только видимые товары по умолчанию
+        if (req.query.isVisible === undefined) {
+            filters.isVisible = true;
+        }
+        else {
+            const v = String(req.query.isVisible).toLowerCase();
+            if (v === 'true')
+                filters.isVisible = true;
+            else if (v === 'false')
+                filters.isVisible = false;
+        }
         // Фильтр по категории
         const categoryId = apiResponse_1.FilterUtil.buildNumberFilter(req.query.categoryId);
         if (categoryId)
@@ -221,7 +247,7 @@ const getProduct = (req, res, next) => __awaiter(void 0, void 0, void 0, functio
                 }
             }
         });
-        if (!product) {
+        if (!product || product.isVisible === false) {
             throw new errorHandler_1.AppError('Товар не найден', 404);
         }
         // Получаем остаток товара
@@ -247,7 +273,7 @@ const updateProduct = (req, res, next) => __awaiter(void 0, void 0, void 0, func
         if (isNaN(productId)) {
             throw new errorHandler_1.AppError('Неверный ID товара', 400);
         }
-        const { name, price, storeId, image, categoryId } = req.body;
+        const { name, price, storeId, image, categoryId, unit, isVisible } = req.body;
         // Проверяем существование товара
         const existingProduct = yield prisma_1.default.product.findUnique({
             where: { id: productId }
@@ -284,6 +310,10 @@ const updateProduct = (req, res, next) => __awaiter(void 0, void 0, void 0, func
             updateData.image = image ? image.trim() : null;
         if (categoryId !== undefined)
             updateData.categoryId = categoryId ? parseInt(categoryId) : null;
+        if (unit !== undefined)
+            updateData.unit = unit ? unit.trim() : null;
+        if (isVisible !== undefined)
+            updateData.isVisible = !!isVisible;
         const updatedProduct = yield prisma_1.default.product.update({
             where: { id: productId },
             data: updateData,

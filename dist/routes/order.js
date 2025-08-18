@@ -25,4 +25,6 @@ router.put('/:id/status', auth_1.authenticate, auth_1.isAdmin, (0, validation_1.
         }
     }
 }), orderStatusController_1.updateOrderStatus);
+// Отчет по заказам (только для администраторов)
+router.get('/admin/report', auth_1.authenticate, auth_1.isAdmin, orderController_1.getOrdersReport);
 exports.default = router;

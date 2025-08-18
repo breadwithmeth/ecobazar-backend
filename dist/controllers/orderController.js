@@ -12,7 +12,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getOrder = exports.getOrders = exports.createOrder = exports.getAllOrders = void 0;
+exports.getOrdersReport = exports.getOrder = exports.getOrders = exports.createOrder = exports.getAllOrders = void 0;
 const prisma_1 = __importDefault(require("../lib/prisma"));
 const errorHandler_1 = require("../middlewares/errorHandler");
 const apiResponse_1 = require("../utils/apiResponse");
@@ -415,3 +415,131 @@ const getOrder = (req, res, next) => __awaiter(void 0, void 0, void 0, function*
     }
 });
 exports.getOrder = getOrder;
+const getOrdersReport = (req, res, next) => __awaiter(void 0, void 0, void 0, function* () {
+    var _a, _b, _c;
+    try {
+        // Парсинг и валидация query
+        const allowedStatuses = ['NEW', 'WAITING_PAYMENT', 'PREPARING', 'DELIVERING', 'DELIVERED', 'CANCELLED'];
+        const now = new Date();
+        const defaultFrom = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000); // 30 дней назад
+        const fromStr = req.query.from || defaultFrom.toISOString();
+        const toStr = req.query.to || now.toISOString();
+        const from = new Date(fromStr);
+        const to = new Date(toStr);
+        if (isNaN(from.getTime()) || isNaN(to.getTime())) {
+            throw new errorHandler_1.AppError('Неверный формат from/to. Используйте ISO дату.', 400);
+        }
+        const storeId = req.query.storeId ? parseInt(req.query.storeId) : undefined;
+        const courierId = req.query.courierId ? parseInt(req.query.courierId) : undefined;
+        const status = req.query.status;
+        const deliveryType = req.query.deliveryType;
+        const groupBy = (req.query.groupBy || 'day').toLowerCase(); // day | month
+        if (status && !allowedStatuses.includes(status)) {
+            throw new errorHandler_1.AppError(`Недопустимый статус. Разрешены: ${allowedStatuses.join(', ')}`, 400);
+        }
+        if (storeId !== undefined && (isNaN(storeId) || storeId <= 0)) {
+            throw new errorHandler_1.AppError('storeId должен быть положительным числом', 400);
+        }
+        if (courierId !== undefined && (isNaN(courierId) || courierId <= 0)) {
+            throw new errorHandler_1.AppError('courierId должен быть положительным числом', 400);
+        }
+        if (deliveryType && !['ASAP', 'SCHEDULED'].includes(deliveryType)) {
+            throw new errorHandler_1.AppError('deliveryType должен быть ASAP или SCHEDULED', 400);
+        }
+        // Where
+        const where = {
+            createdAt: { gte: from, lte: to }
+        };
+        if (storeId) {
+            where.items = { some: { product: { storeId } } };
+        }
+        if (courierId)
+            where.courierId = courierId;
+        if (status) {
+            where.statuses = { some: { status } };
+        }
+        if (deliveryType)
+            where.deliveryType = deliveryType;
+        const orders = yield prisma_1.default.order.findMany({
+            where,
+            orderBy: { createdAt: 'asc' },
+            include: {
+                items: {
+                    select: {
+                        quantity: true,
+                        price: true,
+                        product: {
+                            select: {
+                                id: true,
+                                name: true,
+                                storeId: true,
+                                store: { select: { id: true, name: true } }
+                            }
+                        }
+                    }
+                },
+                courier: { select: { id: true, name: true } },
+                statuses: { orderBy: { createdAt: 'desc' }, take: 1, select: { status: true } }
+            }
+        });
+        // Агрегации
+        const totals = { orders: orders.length, revenue: 0, items: 0, aov: 0 };
+        const byStatus = new Map();
+        const byStore = new Map();
+        const byCourier = new Map();
+        const daily = new Map();
+        for (const order of orders) {
+            const orderRevenue = order.items.reduce((sum, it) => sum + (it.quantity * (it.price || 0)), 0);
+            const orderItems = order.items.reduce((sum, it) => sum + it.quantity, 0);
+            totals.revenue += orderRevenue;
+            totals.items += orderItems;
+            // Статус (текущий)
+            const st = ((_a = order.statuses[0]) === null || _a === void 0 ? void 0 : _a.status) || 'UNKNOWN';
+            byStatus.set(st, (byStatus.get(st) || 0) + 1);
+            // По дням/месяцам
+            const d = new Date(order.createdAt);
+            const key = groupBy === 'month'
+                ? `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
+                : `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}-${String(d.getUTCDate()).padStart(2, '0')}`;
+            const dayEntry = daily.get(key) || { date: key, orders: 0, revenue: 0 };
+            dayEntry.orders += 1;
+            dayEntry.revenue += orderRevenue;
+            daily.set(key, dayEntry);
+            // По магазинам
+            const storesSeen = new Set();
+            for (const it of order.items) {
+                const sId = it.product.storeId;
+                const name = ((_b = it.product.store) === null || _b === void 0 ? void 0 : _b.name) || `Store ${sId}`;
+                const entry = byStore.get(sId) || { storeId: sId, storeName: name, orders: new Set(), revenue: 0, items: 0 };
+                entry.revenue += (it.quantity * (it.price || 0));
+                entry.items += it.quantity;
+                if (!storesSeen.has(sId)) {
+                    entry.orders.add(order.id);
+                    storesSeen.add(sId);
+                }
+                byStore.set(sId, entry);
+            }
+            // По курьерам
+            const cKey = order.courier ? String(order.courier.id) : 'null';
+            const cEntry = byCourier.get(cKey) || { courierId: order.courier ? order.courier.id : null, courierName: ((_c = order.courier) === null || _c === void 0 ? void 0 : _c.name) || 'Не назначен', orders: 0, revenue: 0 };
+            cEntry.orders += 1;
+            cEntry.revenue += orderRevenue;
+            byCourier.set(cKey, cEntry);
+        }
+        totals.aov = totals.orders > 0 ? Number((totals.revenue / totals.orders).toFixed(2)) : 0;
+        const response = {
+            range: { from: from.toISOString(), to: to.toISOString() },
+            filters: { storeId, courierId, status, deliveryType, groupBy },
+            totals,
+            byStatus: Array.from(byStatus.entries()).map(([status, count]) => ({ status, count })).sort((a, b) => b.count - a.count),
+            byStore: Array.from(byStore.values()).map(e => ({ storeId: e.storeId, storeName: e.storeName, orders: e.orders.size, revenue: Number(e.revenue.toFixed(2)), items: e.items })).sort((a, b) => b.revenue - a.revenue),
+            byCourier: Array.from(byCourier.values()).map(e => ({ courierId: e.courierId, courierName: e.courierName, orders: e.orders, revenue: Number(e.revenue.toFixed(2)) })).sort((a, b) => b.revenue - a.revenue),
+            daily: Array.from(daily.values()).sort((a, b) => a.date.localeCompare(b.date))
+        };
+        apiResponse_1.ApiResponseUtil.success(res, response);
+    }
+    catch (error) {
+        next(error);
+    }
+});
+exports.getOrdersReport = getOrdersReport;

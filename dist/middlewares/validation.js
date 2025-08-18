@@ -130,7 +130,9 @@ exports.schemas = {
         price: { required: true, type: 'number', min: 0 },
         storeId: { required: true, type: 'number', min: 1 },
         image: { type: 'string', maxLength: 500 },
-        categoryId: { type: 'number', min: 1 }
+        categoryId: { type: 'number', min: 1 },
+        unit: { type: 'string', minLength: 1, maxLength: 20 },
+        isVisible: { type: 'boolean' }
     },
     createOrder: {
         items: {

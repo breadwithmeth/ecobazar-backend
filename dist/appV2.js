@@ -2,7 +2,6 @@
 var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
-var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = __importDefault(require("express"));
 const dotenv_1 = __importDefault(require("dotenv"));
@@ -69,10 +68,10 @@ app.use((0, compression_1.default)({
         return compression_1.default.filter(req, res);
     }
 }));
-// CORS настройки - разрешаем доступ из разрешенных источников
+// CORS настройки - разрешаем запросы откуда угодно
 app.use((0, cors_1.default)({
-    origin: '*',
-    credentials: true,
+    origin: '*', // Разрешаем запросы с любого домена
+    credentials: false, // Отключаем credentials при origin: '*'
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token'],
     maxAge: 86400 // 24 часа
