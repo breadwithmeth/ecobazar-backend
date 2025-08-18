@@ -68,17 +68,21 @@ app.use((0, compression_1.default)({
         return compression_1.default.filter(req, res);
     }
 }));
-// CORS настройки - разрешаем запросы откуда угодно
-const corsOptions = {
-    origin: '*',
-    credentials: false,
+// CORS настройки по .env (ALLOWED_ORIGINS)
+const allowedOriginsEnvV2 = process.env.ALLOWED_ORIGINS;
+const isWildcardOriginV2 = !allowedOriginsEnvV2 || allowedOriginsEnvV2 === '*';
+const allowedOriginsV2 = isWildcardOriginV2
+    ? '*'
+    : allowedOriginsEnvV2.split(',').map(o => o.trim()).filter(Boolean);
+const corsOptionsV2 = {
+    origin: allowedOriginsV2, // '*' или массив строк
+    credentials: isWildcardOriginV2 ? false : true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'X-CSRF-Token'],
     maxAge: 86400
 };
-app.use((0, cors_1.default)(corsOptions));
-// Явная обработка preflight-запросов
-app.options('*', (0, cors_1.default)(corsOptions));
+app.use((0, cors_1.default)(corsOptionsV2));
+app.options('*', (0, cors_1.default)(corsOptionsV2));
 // Middleware для парсинга тела запроса
 app.use((0, body_parser_1.json)({
     limit: '10mb',

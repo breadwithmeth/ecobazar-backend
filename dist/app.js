@@ -42,14 +42,21 @@ app.use((0, helmet_1.default)({
 }));
 // Сжатие ответов
 app.use((0, compression_1.default)());
-// CORS настройки - разрешаем запросы откуда угодно
-app.use((0, cors_1.default)({
-    origin: '*', // Разрешаем запросы с любого домена
-    credentials: false, // Отключаем credentials при origin: '*'
+// CORS настройки по .env (ALLOWED_ORIGINS)
+const allowedOriginsEnv = process.env.ALLOWED_ORIGINS;
+const isWildcardOrigin = !allowedOriginsEnv || allowedOriginsEnv === '*';
+const allowedOrigins = isWildcardOrigin
+    ? '*'
+    : allowedOriginsEnv.split(',').map(o => o.trim()).filter(Boolean);
+const corsOptions = {
+    origin: allowedOrigins, // '*' или массив строк
+    credentials: isWildcardOrigin ? false : true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
     maxAge: 86400 // 24 часа
-}));
+};
+app.use((0, cors_1.default)(corsOptions));
+app.options('*', (0, cors_1.default)(corsOptions));
 // Middleware для парсинга тела запроса
 app.use((0, body_parser_1.json)({ limit: '10mb' }));
 app.use((0, body_parser_1.urlencoded)({ extended: true, limit: '10mb' }));
