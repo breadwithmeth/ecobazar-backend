@@ -58,15 +58,41 @@ app.use(compression());
 // CORS настройки по .env (ALLOWED_ORIGINS)
 const allowedOriginsEnv = process.env.ALLOWED_ORIGINS;
 const isWildcardOrigin = !allowedOriginsEnv || allowedOriginsEnv === '*';
-const allowedOrigins = isWildcardOrigin 
-  ? '*'
+const parsedAllowed = isWildcardOrigin 
+  ? []
   : allowedOriginsEnv.split(',').map(o => o.trim()).filter(Boolean);
 
-const corsOptions = {
-  origin: ["https://eco-f.drawbridge.kz"], // '*' или массив строк
-  credentials:  true,
+// Функция определения origin: разрешаем домены из .env, Telegram-домены и отсутствие Origin
+const originFn: cors.CorsOptions['origin'] = isWildcardOrigin
+  ? true
+  : (origin, callback) => {
+      if (!origin) return callback(null, true);
+      if (parsedAllowed.includes(origin)) return callback(null, true);
+      try {
+        const url = new URL(origin);
+        const host = url.host;
+        if (host.endsWith('telegram.org') || host === 't.me') {
+          return callback(null, true);
+        }
+      } catch {}
+      return callback(new Error('Not allowed by CORS'));
+    };
+
+const corsOptions: cors.CorsOptions = {
+  origin: originFn,
+  credentials: !isWildcardOrigin,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'X-Telegram-Init-Data',
+    'X-Telegram-Init-Data-Unsafe',
+    'Origin',
+    'Accept'
+  ],
+  exposedHeaders: ['Content-Length', 'ETag'],
+  optionsSuccessStatus: 204,
   maxAge: 86400 // 24 часа
 };
 
