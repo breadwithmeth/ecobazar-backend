@@ -66,7 +66,13 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.options('(.*)', cors(corsOptions));
+// Универсальная обработка preflight без route-паттернов (совместимо с Express 5)
+app.use((req, res, next) => {
+  if (req.method === 'OPTIONS') {
+    return res.sendStatus(204);
+  }
+  next();
+});
 
 // Middleware для парсинга тела запроса
 app.use(json({ limit: '10mb' }));
