@@ -89,7 +89,7 @@ const corsOptionsV2: cors.CorsOptions = {
 };
 
 app.use(cors(corsOptionsV2));
-app.options('*', cors(corsOptionsV2));
+app.options('(.*)', cors(corsOptionsV2));
 
 // Middleware для парсинга тела запроса
 app.use(json({ 

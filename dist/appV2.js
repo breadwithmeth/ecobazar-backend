@@ -82,7 +82,7 @@ const corsOptionsV2 = {
     maxAge: 86400
 };
 app.use((0, cors_1.default)(corsOptionsV2));
-app.options('*', (0, cors_1.default)(corsOptionsV2));
+app.options('(.*)', (0, cors_1.default)(corsOptionsV2));
 // Middleware для парсинга тела запроса
 app.use((0, body_parser_1.json)({
     limit: '10mb',

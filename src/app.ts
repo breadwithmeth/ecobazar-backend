@@ -66,7 +66,7 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
-app.options('*', cors(corsOptions));
+app.options('(.*)', cors(corsOptions));
 
 // Middleware для парсинга тела запроса
 app.use(json({ limit: '10mb' }));
