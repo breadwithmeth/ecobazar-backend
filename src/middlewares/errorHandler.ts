@@ -92,6 +92,7 @@ export const errorHandler = (
 };
 
 function handlePrismaError(error: PrismaClientKnownRequestError): ErrorResponse {
+  console.error('Prisma error:', error);
   switch (error.code) {
     case 'P2002':
       return {

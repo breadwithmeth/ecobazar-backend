@@ -69,6 +69,7 @@ const errorHandler = (error, req, res, next) => {
 };
 exports.errorHandler = errorHandler;
 function handlePrismaError(error) {
+    console.error('Prisma error:', error);
     switch (error.code) {
         case 'P2002':
             return {
