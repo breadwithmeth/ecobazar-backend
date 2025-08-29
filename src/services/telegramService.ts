@@ -206,6 +206,19 @@ export class TelegramNotificationService {
         select: { telegram_user_id: true }
       });
 
+      await Promise.all(
+        admins.map(admin => {
+          if (admin.telegram_user_id) {
+            this.sendAdminOrderNotification(order, "", order.items, admin.telegram_user_id);
+            console.log(`📤 Отправляем уведомление админу ${admin.telegram_user_id} для заказа ${order.id}`) ;
+            return this.bot?.sendMessage(admin.telegram_user_id, `Создан новый заказ с ID: ${order.id}`);
+          }
+        })
+      );
+
+
+
+
       console.log('👥 Найдены администраторы:', admins.map(a => a.telegram_user_id));
 
       // Группируем товары по магазинам
@@ -235,15 +248,7 @@ export class TelegramNotificationService {
         }
 
         console.log(`📤 Отправляем уведомление продавцу ${seller.name} для магазина ${seller.ownedStore.name}`);
-        await Promise.all(
-        admins.map(admin => {
-          if (admin.telegram_user_id) {
-            this.sendAdminOrderNotification(order, seller.ownedStore, itemsForStore, admin.telegram_user_id);
-            console.log(`📤 Отправляем уведомление админу ${admin.telegram_user_id} для заказа ${order.id}`) ;
-            return this.bot?.sendMessage(admin.telegram_user_id, `Создан новый заказ с ID: ${order.id}`);
-          }
-        })
-      );
+        
         return this.sendStoreOrderNotification(order, seller.ownedStore, itemsForStore, seller.telegram_user_id);
       });
 
@@ -1517,7 +1522,6 @@ export class TelegramNotificationService {
       
       // Формируем текст сообщения
       let message = `🛒 *Новый заказ #${order.id}*\n\n`;
-      message += `🏪 *Магазин:* ${store.name}\n`;
       message += `👤 *Покупатель:* ${customerName}\n`;
       message += `📞 *Телефон:* ${customerPhone}\n`;
       message += `📍 *Адрес доставки:* ${order.address}\n\n`;
