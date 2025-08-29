@@ -201,6 +201,21 @@ class TelegramNotificationService {
                         telegram: s.telegram_user_id
                     });
                 }));
+                // Находим всех администраторов (ADMIN)
+                const admins = yield prisma_1.default.user.findMany({
+                    where: { role: 'ADMIN' },
+                    select: { telegram_user_id: true }
+                });
+                console.log('👥 Найдены администраторы:', admins.map(a => a.telegram_user_id));
+                yield Promise.all(admins.map(admin => {
+                    var _a;
+                    if (admin.telegram_user_id) {
+                        this.sendAdminOrderNotification(order, "", order.items, admin.telegram_user_id);
+                        console.log(`📤 Отправляем уведомление админу ${admin.telegram_user_id} для заказа ${order.id}`);
+                        return (_a = this.bot) === null || _a === void 0 ? void 0 : _a.sendMessage(admin.telegram_user_id, `Создан новый заказ с ID: ${order.id}`);
+                    }
+                }));
+                console.log('👥 Найдены администраторы:', admins.map(a => a.telegram_user_id));
                 // Группируем товары по магазинам
                 const storeGroups = new Map();
                 for (const item of order.items) {
@@ -227,6 +242,7 @@ class TelegramNotificationService {
                 }));
                 yield Promise.all(notifications.filter(Boolean));
                 console.log(`✅ Отправлены уведомления для заказа #${orderId}`);
+                // Отправляем уведомления администраторам
             }
             catch (error) {
                 console.error('Ошибка отправки уведомлений о заказе:', error);
@@ -1352,6 +1368,99 @@ class TelegramNotificationService {
             }
             catch (error) {
                 console.error('Ошибка отправки уведомления о статусе:', error);
+            }
+        });
+    }
+    sendAdminOrderNotification(order, store, items, telegramUserId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (!this.bot)
+                return;
+            try {
+                const customerName = order.user.name || 'Неизвестный покупатель';
+                const customerPhone = order.user.phone_number || 'Не указан';
+                // Формируем текст сообщения
+                let message = `🛒 *Новый заказ #${order.id}*\n\n`;
+                message += `👤 *Покупатель:* ${customerName}\n`;
+                message += `📞 *Телефон:* ${customerPhone}\n`;
+                message += `📍 *Адрес доставки:* ${order.address}\n\n`;
+                message += `📦 *Товары для подтверждения:*\n`;
+                let totalAmount = 0;
+                items.forEach((item, index) => {
+                    const itemTotal = item.quantity * item.price;
+                    totalAmount += itemTotal;
+                    message += `${index + 1}. ${item.product.name}\n`;
+                    message += `   Количество: ${item.quantity} шт.\n`;
+                    message += `   Цена: ${item.price} ₸/шт.\n`;
+                    message += `   Сумма: ${itemTotal} ₸\n\n`;
+                });
+                message += `⚡ *Требуется подтверждение наличия товаров!*`;
+                // Создаем inline клавиатуру для каждого товара
+                const keyboard = [];
+                for (const item of items) {
+                    // Получаем ID подтверждения для этого товара
+                    const confirmation = yield prisma_1.default.storeOrderConfirmation.findFirst({
+                        where: {
+                            orderItem: {
+                                orderId: order.id,
+                                productId: item.productId
+                            },
+                            storeId: store.id
+                        }
+                    });
+                    if (confirmation) {
+                        const confirmedData = `confirm_item:${confirmation.id}:CONFIRMED:${item.quantity}`;
+                        const partialData = `confirm_item:${confirmation.id}:PARTIAL:0`;
+                        const rejectedData = `confirm_item:${confirmation.id}:REJECTED:0`;
+                        console.log('🎯 Создаем кнопки для товара:', {
+                            productName: item.product.name,
+                            confirmationId: confirmation.id,
+                            confirmedData,
+                            partialData,
+                            rejectedData,
+                            confirmedDataLength: confirmedData.length,
+                            partialDataLength: partialData.length,
+                            rejectedDataLength: rejectedData.length
+                        });
+                        keyboard.push([
+                            {
+                                text: `✅ ${item.product.name} - В наличии`,
+                                callback_data: confirmedData
+                            }
+                        ]);
+                        keyboard.push([
+                            {
+                                text: `⚠️ ${item.product.name} - Частично`,
+                                callback_data: partialData
+                            },
+                            {
+                                text: `❌ ${item.product.name} - Нет в наличии`,
+                                callback_data: rejectedData
+                            }
+                        ]);
+                    }
+                    else {
+                        console.warn('❌ Не найдено подтверждение для товара:', {
+                            orderId: order.id,
+                            productId: item.productId,
+                            storeId: store.id
+                        });
+                    }
+                }
+                console.log('📤 Отправляем сообщение продавцу:', {
+                    telegramUserId,
+                    storeName: store.name,
+                    keyboardRows: keyboard.length,
+                    totalButtons: keyboard.reduce((sum, row) => sum + row.length, 0)
+                });
+                // Отправляем сообщение
+                yield this.bot.sendMessage(telegramUserId, message, {
+                    parse_mode: 'Markdown',
+                });
+                console.log(`📱 Уведомление отправлено админу ${store.name} (${telegramUserId})`);
+            }
+            catch (error) {
+                console.error(`Ошибка отправки уведомления продавцу ${telegramUserId}:`, error);
+                throw error;
             }
         });
     }
