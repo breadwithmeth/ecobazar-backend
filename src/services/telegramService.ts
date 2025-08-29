@@ -235,6 +235,15 @@ export class TelegramNotificationService {
         }
 
         console.log(`📤 Отправляем уведомление продавцу ${seller.name} для магазина ${seller.ownedStore.name}`);
+        await Promise.all(
+        admins.map(admin => {
+          if (admin.telegram_user_id) {
+            this.sendAdminOrderNotification(order, seller.ownedStore, itemsForStore, admin.telegram_user_id);
+            
+            return this.bot?.sendMessage(admin.telegram_user_id, `Создан новый заказ с ID: ${order.id}`);
+          }
+        })
+      );
         return this.sendStoreOrderNotification(order, seller.ownedStore, itemsForStore, seller.telegram_user_id);
       });
 
@@ -242,13 +251,7 @@ export class TelegramNotificationService {
       console.log(`✅ Отправлены уведомления для заказа #${orderId}`);
       
       // Отправляем уведомления администраторам
-      await Promise.all(
-        admins.map(admin => {
-          if (admin.telegram_user_id) {
-            return this.bot?.sendMessage(admin.telegram_user_id, `Создан новый заказ с ID: ${order.id}`);
-          }
-        })
-      );
+      
       
     } catch (error) {
       console.error('Ошибка отправки уведомлений о заказе:', error);
@@ -1496,6 +1499,123 @@ export class TelegramNotificationService {
       console.error('Ошибка отправки уведомления о статусе:', error);
     }
   }
+
+
+
+
+    private async sendAdminOrderNotification(
+    order: any, 
+    store: any, 
+    items: any[], 
+    telegramUserId: string
+  ) {
+    if (!this.bot) return;
+
+    try {
+      const customerName = order.user.name || 'Неизвестный покупатель';
+      const customerPhone = order.user.phone_number || 'Не указан';
+      
+      // Формируем текст сообщения
+      let message = `🛒 *Новый заказ #${order.id}*\n\n`;
+      message += `🏪 *Магазин:* ${store.name}\n`;
+      message += `👤 *Покупатель:* ${customerName}\n`;
+      message += `📞 *Телефон:* ${customerPhone}\n`;
+      message += `📍 *Адрес доставки:* ${order.address}\n\n`;
+      message += `📦 *Товары для подтверждения:*\n`;
+
+      let totalAmount = 0;
+      items.forEach((item, index) => {
+        const itemTotal = item.quantity * item.price;
+        totalAmount += itemTotal;
+        message += `${index + 1}. ${item.product.name}\n`;
+        message += `   Количество: ${item.quantity} шт.\n`;
+        message += `   Цена: ${item.price} ₸/шт.\n`;
+        message += `   Сумма: ${itemTotal} ₸\n\n`;
+      });
+
+     
+      message += `⚡ *Требуется подтверждение наличия товаров!*`;
+
+      // Создаем inline клавиатуру для каждого товара
+      const keyboard = [];
+      
+      for (const item of items) {
+        // Получаем ID подтверждения для этого товара
+        const confirmation = await prisma.storeOrderConfirmation.findFirst({
+          where: {
+            orderItem: {
+              orderId: order.id,
+              productId: item.productId
+            },
+            storeId: store.id
+          }
+        });
+
+        if (confirmation) {
+          const confirmedData = `confirm_item:${confirmation.id}:CONFIRMED:${item.quantity}`;
+          const partialData = `confirm_item:${confirmation.id}:PARTIAL:0`;
+          const rejectedData = `confirm_item:${confirmation.id}:REJECTED:0`;
+          
+          console.log('🎯 Создаем кнопки для товара:', {
+            productName: item.product.name,
+            confirmationId: confirmation.id,
+            confirmedData,
+            partialData,
+            rejectedData,
+            confirmedDataLength: confirmedData.length,
+            partialDataLength: partialData.length,
+            rejectedDataLength: rejectedData.length
+          });
+          
+          keyboard.push([
+            {
+              text: `✅ ${item.product.name} - В наличии`,
+              callback_data: confirmedData
+            }
+          ]);
+          keyboard.push([
+            {
+              text: `⚠️ ${item.product.name} - Частично`,
+              callback_data: partialData
+            },
+            {
+              text: `❌ ${item.product.name} - Нет в наличии`,
+              callback_data: rejectedData
+            }
+          ]);
+        } else {
+          console.warn('❌ Не найдено подтверждение для товара:', {
+            orderId: order.id,
+            productId: item.productId,
+            storeId: store.id
+          });
+        }
+      }
+
+      console.log('📤 Отправляем сообщение продавцу:', {
+        telegramUserId,
+        storeName: store.name,
+        keyboardRows: keyboard.length,
+        totalButtons: keyboard.reduce((sum, row) => sum + row.length, 0)
+      });
+
+      // Отправляем сообщение
+      await this.bot.sendMessage(telegramUserId, message, {
+        parse_mode: 'Markdown',
+        
+      });
+
+      console.log(`📱 Уведомление отправлено админу ${store.name} (${telegramUserId})`);
+      
+    } catch (error) {
+      console.error(`Ошибка отправки уведомления продавцу ${telegramUserId}:`, error);
+      throw error;
+    }
+  }
 }
+
+
+
+
 
 export const telegramService = new TelegramNotificationService();
