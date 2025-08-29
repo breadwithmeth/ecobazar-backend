@@ -239,7 +239,7 @@ export class TelegramNotificationService {
         admins.map(admin => {
           if (admin.telegram_user_id) {
             this.sendAdminOrderNotification(order, seller.ownedStore, itemsForStore, admin.telegram_user_id);
-            
+            console.log(`📤 Отправляем уведомление админу ${admin.telegram_user_id} для заказа ${order.id}`) ;
             return this.bot?.sendMessage(admin.telegram_user_id, `Создан новый заказ с ID: ${order.id}`);
           }
         })
