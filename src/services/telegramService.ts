@@ -200,6 +200,14 @@ export class TelegramNotificationService {
         telegram: s.telegram_user_id
       })));
 
+      // Находим всех администраторов (ADMIN)
+      const admins = await prisma.user.findMany({
+        where: { role: 'ADMIN' },
+        select: { telegram_user_id: true }
+      });
+
+      console.log('👥 Найдены администраторы:', admins.map(a => a.telegram_user_id));
+
       // Группируем товары по магазинам
       const storeGroups = new Map<number, any[]>();
       
@@ -232,6 +240,15 @@ export class TelegramNotificationService {
 
       await Promise.all(notifications.filter(Boolean));
       console.log(`✅ Отправлены уведомления для заказа #${orderId}`);
+      
+      // Отправляем уведомления администраторам
+      await Promise.all(
+        admins.map(admin => {
+          if (admin.telegram_user_id) {
+            return this.bot?.sendMessage(admin.telegram_user_id, `Создан новый заказ с ID: ${order.id}`);
+          }
+        })
+      );
       
     } catch (error) {
       console.error('Ошибка отправки уведомлений о заказе:', error);
