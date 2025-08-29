@@ -205,6 +205,7 @@ export class TelegramNotificationService {
         where: { role: 'ADMIN' },
         select: { telegram_user_id: true }
       });
+      console.log('👥 Найдены администраторы:', admins.map(a => a.telegram_user_id));
 
       await Promise.all(
         admins.map(admin => {
